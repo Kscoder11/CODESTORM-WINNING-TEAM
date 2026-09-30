@@ -1,35 +1,42 @@
 /**
- * PNG5 MCP Server — Prompt Identification Middleware
+ * PNG5 MCP Server — Intelligent Risk-Based Prompt Identification Middleware
  * 
- * Runs after authentication and BEFORE agent orchestrator execution.
- * Deterministically analyzes incoming user prompts to extract:
- * - Intent & classification (read, search, edit, create, execute, status)
+ * Analyzes incoming user prompts to extract:
+ * - Structured Intent & Classification (informational, search, analysis, routine edit, sensitive edit, deletion, command)
  * - Candidate MCP tools needed
- * - Target resources (paths, commands)
+ * - Target resources
  * - Prompt injection & jailbreak detection
- * - Initial risk scoring & baseline policy verdict (ALLOW, REQUIRE_APPROVAL, DENY, CLARIFICATION)
+ * - Risk scoring & initial routing verdict (ALLOW, REQUIRE_APPROVAL, DENY, CLARIFICATION)
  * 
- * Security principle: LLMs must NEVER authorize their own actions.
- * Authorization is strictly deterministic and server-enforced.
+ * Security principle:
+ * 1. Every prompt passes through middleware analysis.
+ * 2. Safe/informational/read/routine workspace actions proceed automatically without blocking the developer.
+ * 3. Only genuinely sensitive or destructive operations trigger human authorization requests.
+ * 4. Dangerous invariants (.env, keys, system paths, jailbreaks) are permanently hard-denied.
  */
 
 import { log } from "../config.js";
 
-export type OperationType =
-  | "file.read"
-  | "file.list"
-  | "file.search"
-  | "file.write"
-  | "code.execute"
-  | "system.status"
+export type IntentCategory =
+  | "question"
+  | "code_analysis"
+  | "code_search"
+  | "code_suggestion"
+  | "code_edit"
+  | "file_creation"
+  | "file_deletion"
+  | "dependency_change"
+  | "command_execution"
+  | "security_sensitive_change"
+  | "system_status"
   | "unknown";
 
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export interface PromptAnalysisResult {
   valid: boolean;
-  intent: string;
-  operation: OperationType;
+  intent: IntentCategory;
+  operation: string;
   candidateTools: string[];
   targetResources: string[];
   riskLevel: RiskLevel;
@@ -62,7 +69,7 @@ const HARD_DENY_PATTERNS: Array<{ regex: RegExp; reason: string }> = [
 ];
 
 /**
- * Analyze and classify an incoming user prompt before agent execution.
+ * Intelligent deterministic prompt classifier.
  */
 export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): PromptAnalysisResult {
   const prompt = (rawPrompt || "").trim();
@@ -71,7 +78,7 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
   if (!prompt) {
     return {
       valid: false,
-      intent: "empty",
+      intent: "unknown",
       operation: "unknown",
       candidateTools: [],
       targetResources: [],
@@ -87,7 +94,7 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
   if (prompt.length > 4000) {
     return {
       valid: false,
-      intent: "payload_too_large",
+      intent: "unknown",
       operation: "unknown",
       candidateTools: [],
       targetResources: [],
@@ -114,8 +121,8 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
       log("warn", "Prompt triggered hard-deny rule", { prompt, reason, userId });
       return {
         valid: true,
-        intent: "blocked_security_violation",
-        operation: "unknown",
+        intent: "security_sensitive_change",
+        operation: "security.blocked",
         candidateTools: [],
         targetResources: extractResources(prompt),
         riskLevel: "CRITICAL",
@@ -128,21 +135,25 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
     }
   }
 
-  // 4. Extract target resources (file paths, search queries, commands)
+  // 4. Extract target resources
   const targetResources = extractResources(prompt);
+  const lowerPrompt = prompt.toLowerCase();
 
-  // 5. Classify Operation & Select Candidate Tools
-  let operation: OperationType = "unknown";
+  let intent: IntentCategory = "question";
+  let operation = "file.read";
   const candidateTools: string[] = [];
   let riskLevel: RiskLevel = "LOW";
   let riskScore = 0.1;
   let initialDecision: "allow" | "require_approval" | "deny" | "clarification" = "allow";
-  let reason = "Operation permitted by baseline policy.";
+  let reason = "Informational / safe workspace operation permitted.";
 
-  const lowerPrompt = prompt.toLowerCase();
+  // =========================================================================
+  // Intent Classification & Risk Assessment
+  // =========================================================================
 
   // A. Connectivity / Status
   if (/^(hello|hi|hey|ping|status|health)$/i.test(prompt) || lowerPrompt.includes("are you connected")) {
+    intent = "system_status";
     operation = "system.status";
     candidateTools.push("hello");
     riskLevel = "LOW";
@@ -150,106 +161,159 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
     initialDecision = "allow";
     reason = "Connectivity check permitted.";
   }
-  // B. Directory / File Listing
+  // B. Informational Questions & Explanations (e.g. "Explain this file", "What does this do", "Analyze architecture")
   else if (
-    lowerPrompt.includes("list") ||
-    lowerPrompt.includes("show file") ||
-    lowerPrompt.includes("what files") ||
-    lowerPrompt.includes("dir") ||
-    lowerPrompt.includes("ls") ||
-    lowerPrompt.includes("directory")
+    lowerPrompt.startsWith("explain") ||
+    lowerPrompt.startsWith("what is") ||
+    lowerPrompt.startsWith("what does") ||
+    lowerPrompt.startsWith("how does") ||
+    lowerPrompt.startsWith("analyze") ||
+    lowerPrompt.startsWith("suggest") ||
+    lowerPrompt.includes("architecture") ||
+    lowerPrompt.includes("how it works") ||
+    lowerPrompt.includes("find the bug")
   ) {
-    operation = "file.list";
-    candidateTools.push("list_project_files");
+    intent = "question";
+    operation = "file.read";
+    candidateTools.push("read_project_file", "search_project_code", "list_project_files");
     riskLevel = "LOW";
-    riskScore = 0.15;
+    riskScore = 0.1;
     initialDecision = "allow";
-    reason = "Read-only file listing permitted within project workspace.";
+    reason = "Informational codebase explanation permitted without approval.";
   }
-  // C. Code Search / Grep
+  // C. Code Search & Grep (e.g. "Find all files related to auth", "Search for policy")
   else if (
     lowerPrompt.includes("search") ||
+    lowerPrompt.includes("find all") ||
     lowerPrompt.includes("find in code") ||
     lowerPrompt.includes("grep") ||
     lowerPrompt.includes("look for")
   ) {
+    intent = "code_search";
     operation = "file.search";
-    candidateTools.push("search_project_code");
+    candidateTools.push("search_project_code", "list_project_files");
+    riskLevel = "LOW";
+    riskScore = 0.15;
+    initialDecision = "allow";
+    reason = "Read-only codebase search permitted.";
+  }
+  // D. Directory / File Listing (e.g. "List the project folders", "Show files in src")
+  else if (
+    lowerPrompt.includes("list") ||
+    lowerPrompt.includes("show file") ||
+    lowerPrompt.includes("dir") ||
+    lowerPrompt.includes("ls") ||
+    lowerPrompt.includes("what files") ||
+    lowerPrompt.includes("folder structure")
+  ) {
+    intent = "code_search";
+    operation = "file.list";
     candidateTools.push("list_project_files");
     riskLevel = "LOW";
-    riskScore = 0.2;
+    riskScore = 0.1;
     initialDecision = "allow";
-    reason = "Read-only code search permitted within project workspace.";
+    reason = "Read-only directory listing permitted.";
   }
-  // D. File Modification / Editing
+  // E. Destructive Deletion (e.g. "Delete the old authentication module", "Remove file")
   else if (
-    lowerPrompt.includes("edit") ||
-    lowerPrompt.includes("modify") ||
-    lowerPrompt.includes("update file") ||
-    lowerPrompt.includes("replace text") ||
-    lowerPrompt.includes("change line")
+    lowerPrompt.includes("delete file") ||
+    lowerPrompt.includes("delete the") ||
+    lowerPrompt.includes("remove file") ||
+    lowerPrompt.includes("destroy")
   ) {
-    operation = "file.write";
-    candidateTools.push("read_project_file");
-    candidateTools.push("edit_project_file");
-    riskLevel = "HIGH";
-    riskScore = 0.75;
-    initialDecision = "require_approval";
-    reason = "Modifying source files is a high-risk operation requiring human approval.";
-  }
-  // E. File Creation
-  else if (
-    lowerPrompt.includes("create file") ||
-    lowerPrompt.includes("make a new file") ||
-    lowerPrompt.includes("write a new file") ||
-    lowerPrompt.includes("generate file") ||
-    lowerPrompt.includes("save to file")
-  ) {
-    operation = "file.write";
-    candidateTools.push("create_project_file");
-    riskLevel = "MEDIUM";
-    riskScore = 0.65;
-    initialDecision = "require_approval";
-    reason = "Creating new files in the workspace requires human approval.";
-  }
-  // F. Command Execution / Testing
-  else if (
-    lowerPrompt.includes("run command") ||
-    lowerPrompt.includes("run test") ||
-    lowerPrompt.includes("pytest") ||
-    lowerPrompt.includes("npm test") ||
-    lowerPrompt.includes("execute") ||
-    lowerPrompt.includes("git status") ||
-    lowerPrompt.includes("python ")
-  ) {
-    operation = "code.execute";
+    intent = "file_deletion";
+    operation = "file.delete";
     candidateTools.push("run_project_command");
     riskLevel = "HIGH";
     riskScore = 0.85;
     initialDecision = "require_approval";
-    reason = "Terminal command execution requires human approval and strict allowlist enforcement.";
+    reason = "Destructive file deletion requires explicit human authorization.";
   }
-  // G. File Reading / Inspection
+  // F. Dependency / Package Installation (e.g. "Install package lodash", "npm install")
   else if (
-    lowerPrompt.includes("read") ||
-    lowerPrompt.includes("show") ||
-    lowerPrompt.includes("view") ||
-    lowerPrompt.includes("check content") ||
-    lowerPrompt.includes("inspect") ||
-    targetResources.length > 0
+    lowerPrompt.includes("install package") ||
+    lowerPrompt.includes("install dependency") ||
+    lowerPrompt.includes("npm install") ||
+    lowerPrompt.includes("pip install") ||
+    lowerPrompt.includes("add package")
   ) {
-    operation = "file.read";
-    candidateTools.push("read_project_file");
-    candidateTools.push("list_project_files");
-    riskLevel = "LOW";
-    riskScore = 0.25;
-    initialDecision = "allow";
-    reason = "Reading files within authorized workspace is permitted.";
+    intent = "dependency_change";
+    operation = "dependency.install";
+    candidateTools.push("run_project_command");
+    riskLevel = "HIGH";
+    riskScore = 0.8;
+    initialDecision = "require_approval";
+    reason = "External package installation requires operator authorization.";
   }
-  // H. General / Conversational fallback
+  // G. Sensitive Security/Auth/Middleware Modification
+  else if (
+    (lowerPrompt.includes("auth") || lowerPrompt.includes("security") || lowerPrompt.includes("governor") || lowerPrompt.includes("middleware") || lowerPrompt.includes("secret")) &&
+    (lowerPrompt.includes("edit") || lowerPrompt.includes("change") || lowerPrompt.includes("modify") || lowerPrompt.includes("disable") || lowerPrompt.includes("bypass"))
+  ) {
+    intent = "security_sensitive_change";
+    operation = "file.write.sensitive";
+    candidateTools.push("edit_project_file", "read_project_file");
+    riskLevel = "HIGH";
+    riskScore = 0.85;
+    initialDecision = "require_approval";
+    reason = "Modifying authentication or security controls requires explicit approval.";
+  }
+  // H. Routine Reversible UI & Source Code Editing (e.g. "Change button color to blue", "Make login responsive")
+  else if (
+    lowerPrompt.includes("change") ||
+    lowerPrompt.includes("edit") ||
+    lowerPrompt.includes("modify") ||
+    lowerPrompt.includes("color") ||
+    lowerPrompt.includes("button") ||
+    lowerPrompt.includes("style") ||
+    lowerPrompt.includes("responsive") ||
+    lowerPrompt.includes("update") ||
+    lowerPrompt.includes("fix") ||
+    lowerPrompt.includes("add pagination")
+  ) {
+    intent = "code_edit";
+    operation = "file.write.routine";
+    candidateTools.push("read_project_file", "edit_project_file");
+    riskLevel = "MEDIUM";
+    riskScore = 0.35;
+    initialDecision = "allow"; // Permitted under Workspace Editing Policy!
+    reason = "Routine workspace code editing permitted under workspace editing policy with diff tracking.";
+  }
+  // I. File Creation (e.g. "Create a new file called report.txt")
+  else if (
+    lowerPrompt.includes("create file") ||
+    lowerPrompt.includes("make a new file") ||
+    lowerPrompt.includes("write file")
+  ) {
+    intent = "file_creation";
+    operation = "file.write";
+    candidateTools.push("create_project_file");
+    riskLevel = "MEDIUM";
+    riskScore = 0.4;
+    initialDecision = "allow";
+    reason = "Creating ordinary workspace files permitted under workspace policy.";
+  }
+  // J. Routine Testing Commands (e.g. "Run tests", "npm test", "pytest")
+  else if (
+    lowerPrompt.includes("run test") ||
+    lowerPrompt.includes("run the tests") ||
+    lowerPrompt.includes("npm test") ||
+    lowerPrompt.includes("pytest") ||
+    lowerPrompt.includes("git status")
+  ) {
+    intent = "command_execution";
+    operation = "code.execute.test";
+    candidateTools.push("run_project_command");
+    riskLevel = "LOW";
+    riskScore = 0.2;
+    initialDecision = "allow";
+    reason = "Routine test suite execution permitted on allowlist.";
+  }
+  // K. Fallback: Read / Inspect
   else {
+    intent = "question";
     operation = "file.read";
-    candidateTools.push("hello", "list_project_files", "search_project_code");
+    candidateTools.push("read_project_file", "list_project_files", "search_project_code");
     riskLevel = "LOW";
     riskScore = 0.1;
     initialDecision = "allow";
@@ -266,6 +330,7 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
 
   log("info", "Prompt identified and classified", {
     userId,
+    intent,
     operation,
     candidateTools,
     riskLevel,
@@ -275,7 +340,7 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
 
   return {
     valid: true,
-    intent: prompt,
+    intent,
     operation,
     candidateTools,
     targetResources,
@@ -293,9 +358,7 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
  */
 function extractResources(prompt: string): string[] {
   const resources: string[] = [];
-
-  // Match file path patterns (e.g. src/main.py, package.json, /workspace/...)
-  const pathRegex = /(?:[\w.-]+\/)+[\w.-]+|[\w.-]+\.(?:py|js|ts|json|md|txt|html|css|yaml|yml|sh|env)/gi;
+  const pathRegex = /(?:[\w.-]+\/)+[\w.-]+|[\w.-]+\.(?:py|js|ts|tsx|jsx|json|md|txt|html|css|yaml|yml|sh|env)/gi;
   const matches = prompt.match(pathRegex);
 
   if (matches) {

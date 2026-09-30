@@ -28,6 +28,16 @@ resources:
     sensitivity: "internal"
     env: "dev"
 
+  - pattern: "*demo/workspace/*"
+    trust: "trusted"
+    sensitivity: "public"
+    env: "dev"
+
+  - pattern: "demo/workspace/*"
+    trust: "trusted"
+    sensitivity: "public"
+    env: "dev"
+
   - pattern: "db:prod/*"
     trust: "internal"
     sensitivity: "confidential"

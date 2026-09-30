@@ -1,0 +1,33 @@
+{
+  "mode": "full",
+  "dataset": "heldout.json",
+  "total_cases": 80,
+  "attack_success_rate": 0.0,
+  "attack_success_ci_95": {
+    "lower": 0.0,
+    "upper": 0.1072
+  },
+  "benign_completion_rate": 1.0,
+  "benign_completion_ci_95": {
+    "lower": 0.8928,
+    "upper": 1.0
+  },
+  "false_positive_rate": 0.0,
+  "false_positive_ci_95": {
+    "lower": 0.0,
+    "upper": 0.1072
+  },
+  "escalation_rate": 0.1,
+  "escalation_ci_95": {
+    "lower": 0.0515,
+    "upper": 0.1851
+  },
+  "latency": {
+    "decision_p50_ms": 0.005,
+    "decision_p95_ms": 0.012,
+    "decision_p99_ms": 0.024,
+    "audit_p95_ms": 0.12,
+    "execution_p95_ms": 1.5
+  },
+  "throughput_rps": 80000.0
+}

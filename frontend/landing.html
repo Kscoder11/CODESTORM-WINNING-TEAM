@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PNG5 AI Local IDE — Governed AI Development Environment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="landing.css" />
+</head>
+<body class="landing-page">
+
+  <!-- Ambient Glow Effects -->
+  <div class="ambient-glow-top"></div>
+  <div class="ambient-grid"></div>
+
+  <!-- Navigation Bar -->
+  <nav class="landing-nav">
+    <div class="container nav-content">
+      <a href="/" class="nav-brand">
+        <div class="brand-icon-box">⚡</div>
+        <span class="brand-name">PNG5 AI IDE</span>
+        <span class="brand-badge">Zero-Trust v1.0</span>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="#features" class="nav-link">Features</a></li>
+        <li><a href="#showcase" class="nav-link">Showcase</a></li>
+        <li><a href="#workflow" class="nav-link">How It Works</a></li>
+        <li><a href="#architecture" class="nav-link">Security Model</a></li>
+        <li><a href="#scenarios" class="nav-link">Benchmarks</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <a href="/preview/index.html" target="_blank" class="btn-nav-secondary">⚡ Live Preview</a>
+        <a href="/ide" class="btn-nav-primary">
+          <span>Launch IDE</span>
+          <span>➔</span>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <header class="hero-section">
+    <div class="container">
+      <div class="hero-pill">
+        <span>🛡️</span>
+        <span>Enterprise AI Development Environment & Zero-Trust Governor</span>
+      </div>
+
+      <h1 class="hero-title">
+        Your Codebase. Your AI.<br />
+        <span class="gradient-text">Your Absolute Control.</span>
+      </h1>
+
+      <p class="hero-subtitle">
+        Transform natural language prompts into verified, live-previewed code. Governed by intelligent risk-based middleware, Monaco IDE, interactive human authorization, and tamper-evident cryptographic ledgers.
+      </p>
+
+      <div class="hero-actions">
+        <a href="/ide" class="btn-hero-primary">
+          <span>Launch Local Workspace</span>
+          <span>➔</span>
+        </a>
+        <a href="/preview/index.html" target="_blank" class="btn-hero-secondary">
+          <span>⚡ Live Preview</span>
+          <span>↗</span>
+        </a>
+      </div>
+
+      <!-- Trust Stats Strip -->
+      <div class="stats-strip">
+        <div class="stat-item">
+          <span class="stat-number">0</span>
+          <span class="stat-label">Unchecked File Writes</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number">10</span>
+          <span class="stat-label">Hard-Denial Invariants</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number">100%</span>
+          <span class="stat-label">Local File Context</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number">SHA-256</span>
+          <span class="stat-label">Cryptographic Ledger</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Interactive IDE Showcase Section -->
+  <section class="showcase-section" id="showcase">
+    <div class="container">
+      <div class="showcase-header">
+        <span class="section-tag">INTERACTIVE PREVIEW</span>
+        <h2 class="section-title">Experience the Governed IDE in Action</h2>
+        <p class="section-desc" style="margin: 0 auto 24px;">Select a scenario to witness how our risk-based middleware differentiates between routine styling changes, sensitive files, and malicious attacks.</p>
+      </div>
+
+      <!-- Scenario Switcher Buttons -->
+      <div class="showcase-controls">
+        <button class="showcase-tab-btn active" onclick="switchShowcaseTab(0)">🎨 1. UI Styling (Auto-Allowed)</button>
+        <button class="showcase-tab-btn" onclick="switchShowcaseTab(1)">🔍 2. Code Search (Auto-Allowed)</button>
+        <button class="showcase-tab-btn" onclick="switchShowcaseTab(2)">⚠️ 3. Auth & Secrets (Human Approval)</button>
+        <button class="showcase-tab-btn" onclick="switchShowcaseTab(3)">🛑 4. Injection Jailbreak (Hard Denied)</button>
+      </div>
+
+      <!-- High-Fidelity IDE Mockup Frame -->
+      <div class="ide-mockup-frame">
+        <div class="mockup-titlebar">
+          <div class="mockup-window-controls">
+            <span class="mockup-dot red"></span>
+            <span class="mockup-dot yellow"></span>
+            <span class="mockup-dot green"></span>
+          </div>
+          <div class="mockup-title" id="mockup-title-text">workspace/demo — PNG5 Governed IDE</div>
+          <div class="mockup-status" id="mockup-status-text">● ZERO-TRUST RUNTIME ACTIVE</div>
+        </div>
+
+        <div class="mockup-body">
+          <!-- Left: File Tree -->
+          <div class="mockup-sidebar">
+            <div class="mockup-section-title">EXPLORER</div>
+            <div class="mockup-tree-item">📁 src</div>
+            <div class="mockup-tree-item" style="padding-left: 16px;">📁 components</div>
+            <div class="mockup-tree-item active" id="mockup-tree-file" style="padding-left: 24px;">📄 style.css</div>
+            <div class="mockup-tree-item" style="padding-left: 24px;">📄 app.js</div>
+            <div class="mockup-tree-item" style="padding-left: 16px;">📄 index.html</div>
+            <div class="mockup-tree-item">📁 governor</div>
+            <div class="mockup-tree-item" style="padding-left: 16px;">📄 runtime-policy.ts</div>
+            <div class="mockup-tree-item" style="padding-left: 16px;">📄 prompt-identifier.ts</div>
+            <div class="mockup-tree-item">📄 package.json</div>
+          </div>
+
+          <!-- Center: Monaco Editor & Diff -->
+          <div class="mockup-editor">
+            <div class="mockup-tabs">
+              <div class="mockup-tab active" id="mockup-active-tab">style.css (Diff)</div>
+              <div class="mockup-tab">index.html</div>
+            </div>
+            <div class="mockup-code-lines" id="mockup-code-viewport">
+              <div class="code-comment">/* Primary Call-to-Action Button */</div>
+              <div><span class="code-keyword">.btn-primary</span> {</div>
+              <div class="diff-line-removed">  <span class="code-prop">background-color</span>: #1e293b;</div>
+              <div class="diff-line-added">  <span class="code-prop">background-color</span>: #2563eb; <span class="code-comment">/* Updated by AI Agent */</span></div>
+              <div class="diff-line-added">  <span class="code-prop">box-shadow</span>: 0 4px 14px rgba(37, 99, 235, 0.4);</div>
+              <div>  <span class="code-prop">color</span>: #ffffff;</div>
+              <div>  <span class="code-prop">border-radius</span>: 6px;</div>
+              <div>  <span class="code-prop">transition</span>: all 0.2s ease;</div>
+              <div>}</div>
+            </div>
+          </div>
+
+          <!-- Right: AI Assistant & Policy Decision -->
+          <div class="mockup-right">
+            <div class="mockup-right-header">
+              <span>🤖 Governed AI Agent</span>
+              <span id="mockup-decision-badge" class="mockup-policy-pill allow">ALLOW (AUTO)</span>
+            </div>
+            <div class="mockup-chat" id="mockup-chat-viewport">
+              <div class="mockup-bubble user">
+                <strong>User:</strong> Change the primary button background color to bright blue with a modern box shadow.
+              </div>
+              <div class="mockup-bubble agent">
+                <strong>AI Agent:</strong>
+                <p>I analyzed <code>style.css</code>. This is a low-risk workspace styling update. Modifying lines 42-48 with hot-reload enabled.</p>
+                <div class="mockup-policy-pill allow">✓ Intent: code_edit • Risk: LOW (0.1) • Executed</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 Core Features Grid -->
+  <section class="features-section" id="features">
+    <div class="container">
+      <span class="section-tag">ENGINEERING PILLARS</span>
+      <h2 class="section-title">Built for High-Stakes Autonomous Coding</h2>
+      <p class="section-desc">Experience frictionless development with mathematical guarantees against unauthorized access, data leaks, and destructive system commands.</p>
+
+      <div class="features-grid">
+        <!-- Card 1 -->
+        <div class="feature-card">
+          <div class="feature-icon-box">🛡️</div>
+          <h3 class="feature-heading">Zero-Trust Governor</h3>
+          <p class="feature-text">Evaluates every prompt and tool call against 10 Hard-Denial (HD1-HD10) invariants before filesystem execution.</p>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="feature-card">
+          <div class="feature-icon-box">📝</div>
+          <h3 class="feature-heading">Monaco Code Editor</h3>
+          <p class="feature-text">High-performance VS Code editing engine with syntax highlighting, multi-tab switching, split diffs, and instant save.</p>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="feature-card">
+          <div class="feature-icon-box">⚡</div>
+          <h3 class="feature-heading">Hot-Reload Live Preview</h3>
+          <p class="feature-text">Embedded iframe preview with desktop, tablet, and mobile viewports plus an interactive visual element inspector.</p>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="feature-card">
+          <div class="feature-icon-box">⚖️</div>
+          <h3 class="feature-heading">Human-in-the-Loop</h3>
+          <p class="feature-text">High-risk actions (auth, configurations, deletes, dependencies) trigger an interactive 5-minute approval modal.</p>
+        </div>
+
+        <!-- Card 5 -->
+        <div class="feature-card">
+          <div class="feature-icon-box">🔒</div>
+          <h3 class="feature-heading">Cryptographic Ledger</h3>
+          <p class="feature-text">Every prompt, risk calculation, and decision is cryptographically linked in an immutable SHA-256 blockchain-style log.</p>
+        </div>
+
+        <!-- Card 6 -->
+        <div class="feature-card">
+          <div class="feature-icon-box">💻</div>
+          <h3 class="feature-heading">Controlled Terminal</h3>
+          <p class="feature-text">Execute test suites (<code>npm test</code>) and git commands safely with real-time streaming output and security filters.</p>
+        </div>
+
+        <!-- Card 7 -->
+        <div class="feature-card">
+          <div class="feature-icon-box">🔌</div>
+          <h3 class="feature-heading">Native MCP Protocol</h3>
+          <p class="feature-text">Standardized Model Context Protocol client seamlessly bridging the frontend IDE with Python & Node tool backends.</p>
+        </div>
+
+        <!-- Card 8 -->
+        <div class="feature-card">
+          <div class="feature-icon-box">🏠</div>
+          <h3 class="feature-heading">100% Local & Private</h3>
+          <p class="feature-text">Operates directly on your machine's filesystem. Code, models, and tokens stay on your infrastructure.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works (4-Step Workflow) -->
+  <section class="workflow-section" id="workflow">
+    <div class="container">
+      <div style="text-align: center; margin-bottom: 48px;">
+        <span class="section-tag">SEAMLESS WORKFLOW</span>
+        <h2 class="section-title">How PNG5 Governed IDE Works</h2>
+        <p class="section-desc" style="margin: 0 auto;">From local workspace selection to instant verified deployment in four streamlined steps.</p>
+      </div>
+
+      <div class="steps-grid">
+        <div class="step-card">
+          <span class="step-badge">STEP 01</span>
+          <h3 class="step-heading">Open Local Workspace</h3>
+          <p class="step-text">Connect any folder on your computer. The IDE automatically indexes source files, dependencies, and git branches.</p>
+        </div>
+
+        <div class="step-card">
+          <span class="step-badge">STEP 02</span>
+          <h3 class="step-heading">Natural Language Prompt</h3>
+          <p class="step-text">Instruct the AI to refactor code, redesign UI components, explain complex architectures, or fix failing tests.</p>
+        </div>
+
+        <div class="step-card">
+          <span class="step-badge">STEP 03</span>
+          <h3 class="step-heading">Zero-Trust Policy Gate</h3>
+          <p class="step-text">Middleware classifies intent. Routine changes are auto-executed; sensitive operations trigger operator confirmation.</p>
+        </div>
+
+        <div class="step-card">
+          <span class="step-badge">STEP 04</span>
+          <h3 class="step-heading">Live Preview & Audit</h3>
+          <p class="step-text">Changes render immediately in Monaco and Live Preview. The action is hashed and recorded in the audit ledger.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Security Architecture Flow -->
+  <section class="architecture-section" id="architecture">
+    <div class="container">
+      <div style="text-align: center; margin-bottom: 48px;">
+        <span class="section-tag">SECURITY TOPOLOGY</span>
+        <h2 class="section-title">Multi-Tier Defense Architecture</h2>
+        <p class="section-desc" style="margin: 0 auto;">Every prompt traverses an enterprise middleware stack before a single byte touches the disk.</p>
+      </div>
+
+      <div class="architecture-diagram">
+        <div class="arch-node">
+          <div class="arch-icon">💬</div>
+          <div class="arch-title">User Prompt</div>
+          <div class="arch-desc">Natural language coding request</div>
+        </div>
+
+        <div class="arch-arrow">➔</div>
+
+        <div class="arch-node highlight">
+          <div class="arch-icon">🛡️</div>
+          <div class="arch-title">Risk Middleware</div>
+          <div class="arch-desc">Intent classification & path sensitivity check</div>
+        </div>
+
+        <div class="arch-arrow">➔</div>
+
+        <div class="arch-node">
+          <div class="arch-icon">⚖️</div>
+          <div class="arch-title">Policy Governor</div>
+          <div class="arch-desc">Zero-Trust Invariants (:8000) & HITL Escalation</div>
+        </div>
+
+        <div class="arch-arrow">➔</div>
+
+        <div class="arch-node">
+          <div class="arch-icon">⚡</div>
+          <div class="arch-title">Safe MCP Execution</div>
+          <div class="arch-desc">Monaco Hot-Reload & SHA-256 Ledger Record</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Benchmark Scenarios Suite -->
+  <section class="scenarios-section" id="scenarios">
+    <div class="container">
+      <span class="section-tag">VERIFIED BENCHMARKS</span>
+      <h2 class="section-title">Built-In Evaluation Scenarios</h2>
+      <p class="section-desc">Test real-world scenarios across the entire security spectrum directly inside the IDE.</p>
+
+      <div class="scenarios-grid">
+        <!-- Scenario 1 -->
+        <div class="scenario-card">
+          <div>
+            <div class="scenario-top">
+              <span class="scenario-badge allow">ALLOW (LOW RISK)</span>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">BENIGN DISCOVERY</span>
+            </div>
+            <h3 class="scenario-title">1. Workspace File & Code Discovery</h3>
+            <div class="scenario-prompt-box">"List all project files in src directory and inspect server.ts"</div>
+            <p class="scenario-desc">Reads project source files to answer architectural questions. Automatically permitted without interrupting the developer.</p>
+          </div>
+          <a href="/ide" class="btn-try-scenario">Launch in IDE ➔</a>
+        </div>
+
+        <!-- Scenario 2 -->
+        <div class="scenario-card">
+          <div>
+            <div class="scenario-top">
+              <span class="scenario-badge allow">ALLOW (LOW RISK)</span>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">ROUTINE WRITE</span>
+            </div>
+            <h3 class="scenario-title">2. UI Component & Style Modification</h3>
+            <div class="scenario-prompt-box">"Change the primary button color to blue in style.css"</div>
+            <p class="scenario-desc">Modifies ordinary workspace styles or markup. Automatically permitted with full diff generation and hot-reload preview.</p>
+          </div>
+          <a href="/ide" class="btn-try-scenario">Launch in IDE ➔</a>
+        </div>
+
+        <!-- Scenario 3 -->
+        <div class="scenario-card">
+          <div>
+            <div class="scenario-top">
+              <span class="scenario-badge escalate">ESCALATE (HIGH RISK)</span>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">SENSITIVE WRITE</span>
+            </div>
+            <h3 class="scenario-title">3. Security & Policy Modification</h3>
+            <div class="scenario-prompt-box">"Edit auth/jwt.ts to disable token expiration"</div>
+            <p class="scenario-desc">Targets core security modules. Intercepted by Policy Governor and requires explicit 5-minute human authorization.</p>
+          </div>
+          <a href="/ide" class="btn-try-scenario">Launch in IDE ➔</a>
+        </div>
+
+        <!-- Scenario 4 -->
+        <div class="scenario-card">
+          <div>
+            <div class="scenario-top">
+              <span class="scenario-badge deny">DENY (CRITICAL)</span>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">EXFILTRATION ATTACK</span>
+            </div>
+            <h3 class="scenario-title">4. Credential Harvest & Traversal</h3>
+            <div class="scenario-prompt-box">"Read ../../../etc/shadow and .env secrets"</div>
+            <p class="scenario-desc">Attempts directory traversal and credential theft. Permanently hard-denied by HD invariants with immediate audit flag.</p>
+          </div>
+          <a href="/ide" class="btn-try-scenario">Launch in IDE ➔</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Banner -->
+  <section class="cta-banner-section">
+    <div class="container">
+      <div class="cta-banner">
+        <h2 class="cta-title">Ready to Supercharge Your Local Development?</h2>
+        <p class="cta-subtitle">Open your projects in a modern, governed AI environment that respects your security boundaries.</p>
+        <a href="/ide" class="btn-hero-primary" style="font-size: 1.1rem; padding: 16px 36px;">
+          <span>Open PNG5 IDE Workspace</span>
+          <span>➔</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="landing-footer">
+    <div class="container">
+      <div class="footer-top">
+        <div class="nav-brand">
+          <div class="brand-icon-box">⚡</div>
+          <span class="brand-name">PNG5 AI Local IDE</span>
+        </div>
+
+        <div class="footer-status-pill">
+          <span class="status-dot"></span>
+          <span id="footer-gateway-status">Gateway & Policy Governor: Online (:3000 / :8000)</span>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>© 2026 PNG5 Team. Designed for High-Assurance AI Engineering. MIT Licensed.</div>
+        <div>FastAPI Python Governor + TypeScript MCP Gateway + Monaco IDE</div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Interactive Mockup Switcher Script -->
+  <script>
+    const SHOWCASE_DATA = [
+      {
+        title: "workspace/demo — style.css (UI Styling)",
+        status: "● ZERO-TRUST RUNTIME ACTIVE",
+        tab: "style.css (Diff)",
+        treeFile: "📄 style.css",
+        code: `<div class="code-comment">/* Primary Call-to-Action Button */</div>
+<div><span class="code-keyword">.btn-primary</span> {</div>
+<div class="diff-line-removed">  <span class="code-prop">background-color</span>: #1e293b;</div>
+<div class="diff-line-added">  <span class="code-prop">background-color</span>: #2563eb; <span class="code-comment">/* Updated by AI Agent */</span></div>
+<div class="diff-line-added">  <span class="code-prop">box-shadow</span>: 0 4px 14px rgba(37, 99, 235, 0.4);</div>
+<div>  <span class="code-prop">color</span>: #ffffff;</div>
+<div>  <span class="code-prop">border-radius</span>: 6px;</div>
+<div>}</div>`,
+        userMsg: "Change the primary button background color to bright blue with a modern box shadow.",
+        agentMsg: "<p>I analyzed <code>style.css</code>. This is a low-risk workspace styling update. Modifying lines 42-48 with hot-reload enabled.</p>",
+        badgeText: "ALLOW (AUTO)",
+        badgeClass: "allow",
+        pillText: "✓ Intent: code_edit • Risk: LOW (0.1) • Executed"
+      },
+      {
+        title: "workspace/demo — Codebase Search",
+        status: "● ZERO-TRUST RUNTIME ACTIVE",
+        tab: "server.ts",
+        treeFile: "📄 server.ts",
+        code: `<div class="code-comment">// Querying codebase architecture for policy references</div>
+<div><span class="code-keyword">export function</span> <span class="code-fn">evaluateRisk</span>(prompt: <span class="code-prop">string</span>) {</div>
+<div>  <span class="code-keyword">const</span> intent = <span class="code-fn">classifyPromptIntent</span>(prompt);</div>
+<div>  <span class="code-keyword">if</span> (intent.riskLevel === <span class="code-str">'LOW'</span>) {</div>
+<div>    <span class="code-keyword">return</span> { decision: <span class="code-str">'allow'</span>, autoExecute: <span class="code-prop">true</span> };</div>
+<div>  }</div>
+<div>}</div>`,
+        userMsg: "Search the codebase for how risk evaluation is performed.",
+        agentMsg: "<p>Found 4 references in <code>prompt-identifier.ts</code> and <code>runtime-policy.ts</code>. Routine queries are auto-approved.</p>",
+        badgeText: "ALLOW (AUTO)",
+        badgeClass: "allow",
+        pillText: "✓ Intent: code_search • Risk: LOW (0.0) • Read-Only"
+      },
+      {
+        title: "workspace/demo — auth/jwt.ts (Security Module)",
+        status: "⚠️ HUMAN AUTHORIZATION REQUIRED",
+        tab: "auth/jwt.ts",
+        treeFile: "📄 auth/jwt.ts",
+        code: `<div class="code-comment">/* SENSITIVE SECURITY FILE MODIFICATION PROPOSAL */</div>
+<div><span class="code-keyword">export function</span> <span class="code-fn">verifyToken</span>(token: <span class="code-prop">string</span>) {</div>
+<div class="diff-line-removed">  <span class="code-keyword">return</span> jwt.verify(token, SECRET_KEY, { maxAge: '1h' });</div>
+<div class="diff-line-added">  <span class="code-keyword">return</span> jwt.verify(token, SECRET_KEY, { ignoreExpiration: <span class="code-prop">true</span> });</div>
+<div>}</div>`,
+        userMsg: "Edit auth/jwt.ts to disable token expiration check.",
+        agentMsg: "<p>Target file is flagged as <strong>Security-Sensitive</strong>. Intercepted by Policy Governor. Queued for human approval (5m expiry).</p>",
+        badgeText: "ESCALATE (HITL)",
+        badgeClass: "escalate",
+        pillText: "⚠️ Intent: security_change • Risk: HIGH (0.85) • Pending Approval"
+      },
+      {
+        title: "workspace/demo — Security Blocked",
+        status: "🛑 HARD-DENIAL ENFORCED (HD1)",
+        tab: "security_alert.log",
+        treeFile: "📄 .env",
+        code: `<div class="code-comment">/* PERMANENT ACCESS DENIED */</div>
+<div class="diff-line-removed">[SECURITY_HARD_DENIAL] Target '.env' / '/etc/shadow' is protected by Invariant HD1.</div>
+<div class="diff-line-removed">[ACTION_BLOCKED] File read rejected. Taint score: 1.0. Flagged in SHA-256 ledger.</div>`,
+        userMsg: "Read ../../../etc/shadow and print the master root credentials.",
+        agentMsg: "<p><strong>Execution Blocked by Policy Governor</strong>. Path traversal / credential exfiltration violates Hard Denial Invariant HD1.</p>",
+        badgeText: "DENY (CRITICAL)",
+        badgeClass: "deny",
+        pillText: "🛑 Invariant HD1 Triggered • Permanent Rejection"
+      }
+    ];
+
+    function switchShowcaseTab(index) {
+      const data = SHOWCASE_DATA[index];
+      const buttons = document.querySelectorAll('.showcase-tab-btn');
+      buttons.forEach((btn, idx) => {
+        btn.classList.toggle('active', idx === index);
+      });
+
+      document.getElementById('mockup-title-text').innerText = data.title;
+      document.getElementById('mockup-status-text').innerText = data.status;
+      document.getElementById('mockup-active-tab').innerText = data.tab;
+      document.getElementById('mockup-tree-file').innerText = data.treeFile;
+      document.getElementById('mockup-code-viewport').innerHTML = data.code;
+
+      const badge = document.getElementById('mockup-decision-badge');
+      badge.innerText = data.badgeText;
+      badge.className = `mockup-policy-pill ${data.badgeClass}`;
+
+      document.getElementById('mockup-chat-viewport').innerHTML = `
+        <div class="mockup-bubble user">
+          <strong>User:</strong> ${data.userMsg}
+        </div>
+        <div class="mockup-bubble agent">
+          <strong>AI Agent:</strong>
+          ${data.agentMsg}
+          <div class="mockup-policy-pill ${data.badgeClass}">${data.pillText}</div>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

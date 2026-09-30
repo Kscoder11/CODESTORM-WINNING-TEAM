@@ -112,23 +112,52 @@ export async function evaluatePolicy(request: ToolRequest): Promise<PolicyDecisi
   }
 }
 
+const SENSITIVE_PATH_PATTERNS = [
+  "auth",
+  "security",
+  "governor",
+  "jwt",
+  "session",
+  "middleware",
+  "password",
+  "secret",
+  "package.json",
+  "package-lock.json",
+  "pyproject.toml",
+  "requirements.txt",
+  ".config",
+  ".env",
+];
+
+function isSensitiveResource(resource?: string): boolean {
+  if (!resource) return false;
+  const lower = resource.toLowerCase();
+  return SENSITIVE_PATH_PATTERNS.some((pat) => lower.includes(pat));
+}
+
 /**
  * Local-only policy evaluation for when no Governor session is configured.
  * 
- * This is a fallback for initial testing/demo. It implements the same
- * categories as the Governor but with simplified rules.
- * 
- * In production, ALL decisions must go through the Governor.
+ * Implements intelligent risk tiers:
+ * - Low Risk / Reads / Search -> ALLOW
+ * - Routine Workspace Edits (.css, .html, .js, .ts, etc.) -> ALLOW
+ * - Sensitive Files (auth, security, governor, package.json) -> APPROVAL REQUIRED
+ * - Secret files (.env, /etc/shadow) -> DENY
  */
 function evaluateLocalPolicy(request: ToolRequest): PolicyDecision {
   log("info", "Using local policy evaluation (no Governor session)", { tool: request.tool });
 
-  // Hello tool — always allow
+  // 1. Hello tool — always allow
   if (request.tool === "hello") {
     return { action: "allow", reason: "Connectivity check permitted." };
   }
 
-  // Read-only tools — allow within workspace scope
+  // 2. Hard Deny secrets
+  if (request.resource && (request.resource.includes(".env") || request.resource.includes("/etc/shadow"))) {
+    return { action: "deny", reason: "Access to protected system/secret files is hard-denied." };
+  }
+
+  // 3. Read-only tools — allow within workspace scope
   if (["list_project_files", "read_project_file", "search_project_code"].includes(request.tool)) {
     return {
       action: "allow",
@@ -136,19 +165,32 @@ function evaluateLocalPolicy(request: ToolRequest): PolicyDecision {
     };
   }
 
-  // Write tools — require approval
+  // 4. Write tools — allow routine workspace edits, escalate sensitive paths
   if (["edit_project_file", "create_project_file"].includes(request.tool)) {
+    if (isSensitiveResource(request.resource)) {
+      return {
+        action: "approval_required",
+        reason: `Modifying sensitive security file '${request.resource}' requires operator authorization.`,
+      };
+    }
     return {
-      action: "approval_required",
-      reason: `File modification via '${request.tool}' requires human approval.`,
+      action: "allow",
+      reason: `Routine workspace file modification permitted under workspace editing policy.`,
     };
   }
 
-  // Command execution — require approval
+  // 5. Command execution — allow allowlisted tests, escalate others
   if (request.tool === "run_project_command") {
+    const cmd = String(request.params?.command || "").toLowerCase();
+    if (["git", "ls", "npm", "pytest", "python", "node", "cat", "grep"].includes(cmd)) {
+      return {
+        action: "allow",
+        reason: `Allowlisted execution command '${cmd}' permitted.`,
+      };
+    }
     return {
       action: "approval_required",
-      reason: "Command execution requires human approval.",
+      reason: "Arbitrary command execution requires human approval.",
     };
   }
 

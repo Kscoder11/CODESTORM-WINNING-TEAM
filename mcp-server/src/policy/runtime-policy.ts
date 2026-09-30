@@ -1,17 +1,14 @@
 /**
- * PNG5 MCP Server — Runtime Policy Engine
+ * PNG5 MCP Server — Intelligent Runtime Policy Engine
  * 
- * Enforces zero-trust authorization at the execution boundary immediately
+ * Enforces Zero-Trust authorization at the execution boundary immediately
  * before any MCP tool is invoked.
  * 
- * Checks:
- * 1. User & session context
- * 2. Tool permission & allowlist
- * 3. Resource canonicalization & workspace containment
- * 4. Hard-deny rules (secret files, system paths, dangerous commands)
- * 5. Human approval verification & one-time redemption
- * 6. Governor backend authorization (/v1/actions)
- * 7. Audit logging
+ * Policy Tiers:
+ * 1. Low Risk (Informational, Read-Only, Search, Routine Testing) -> Auto-Allow
+ * 2. Routine Workspace Editing (Components, Styles, HTML, Documentation) -> Auto-Allow under Workspace Policy
+ * 3. High Risk (Sensitive Auth/Security Files, Deletions, Package Installs, Unapproved Commands) -> Require Operator Approval
+ * 4. Critical Invariants (Secrets, System Passwords, Path Traversal, Jailbreak Injection) -> Permanent Hard-Deny
  */
 
 import { config, log } from "../config.js";
@@ -24,6 +21,7 @@ export interface PolicyContext {
   agentSessionId?: string;
   agentSessionToken?: string;
   approvalId?: string | null;
+  workspacePolicy?: "permissive_editing" | "strict_approvals";
 }
 
 export interface ProposedAction {
@@ -52,6 +50,23 @@ const TOOL_ACTION_MAP: Record<string, string> = {
   run_project_command: "code.execute",
 };
 
+/** Sensitive path substrings that require human authorization */
+const SENSITIVE_PATH_PATTERNS = [
+  "auth",
+  "security",
+  "governor",
+  "jwt",
+  "session",
+  "middleware",
+  "password",
+  "secret",
+  "package.json",
+  "package-lock.json",
+  "pyproject.toml",
+  "requirements.txt",
+  ".config",
+];
+
 export class RuntimePolicyEngine {
   private approvalManager = getApprovalManager();
 
@@ -64,7 +79,7 @@ export class RuntimePolicyEngine {
   ): Promise<RuntimePolicyVerdict> {
     const governorAction = TOOL_ACTION_MAP[action.tool] || "code.execute";
 
-    // 1. Hard Deny Checks (Never overrideable by human approval)
+    // 1. Hard Deny Checks (Non-overrideable)
     const hardDenyReason = this.checkHardDeny(action);
     if (hardDenyReason) {
       log("warn", "Runtime policy: Hard-deny triggered", { tool: action.tool, reason: hardDenyReason });
@@ -105,14 +120,13 @@ export class RuntimePolicyEngine {
         return {
           allowed: false,
           verdict: "deny",
-          reason: `Approval request '${context.approvalId}' was rejected by reviewer`,
+          reason: `Approval request '${context.approvalId}' was rejected by operator`,
           riskScore: 0.9,
           rules: ["RULE_APPROVAL_REJECTED"],
         };
       }
 
       if (approval.status === "approved") {
-        // Verify parameter/tool binding
         if (approval.tool !== action.tool) {
           return {
             allowed: false,
@@ -134,153 +148,117 @@ export class RuntimePolicyEngine {
         return {
           allowed: true,
           verdict: "allow",
-          reason: `Approved by reviewer (${approval.decidedBy || "human"})`,
+          reason: `Approved by operator (${approval.decidedBy || "human"})`,
           riskScore: approval.riskScore,
           rules: ["RULE_APPROVAL_VERIFIED"],
         };
       }
     }
 
-    // 3. Evaluate with Governor Backend if session token available
-    const sessionToken = context.agentSessionToken || config.agentSessionToken;
-    if (sessionToken) {
-      try {
-        const response = await fetch(`${config.governorUrl}/v1/actions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${sessionToken}`,
-          },
-          body: JSON.stringify({
-            action: governorAction,
-            target: action.resource,
-            params: action.params,
-            approval_id: context.approvalId || null,
-          }),
-          signal: AbortSignal.timeout(5000),
-        });
-
-        if (response.ok) {
-          const data = (await response.json()) as {
-            outcome: string;
-            score: number;
-            reason: string;
-            rules: string[];
-            approval_id?: string;
-          };
-
-          if (data.outcome === "ALLOW" || data.outcome === "CONSTRAIN") {
-            return {
-              allowed: true,
-              verdict: "allow",
-              reason: data.reason || `Governor authorized action (score: ${data.score})`,
-              riskScore: data.score,
-              rules: data.rules || [],
-            };
-          }
-
-          if (data.outcome === "ESCALATE") {
-            const approvalReq = this.approvalManager.createRequest({
-              userId: context.userId,
-              agentSessionId: context.agentSessionId,
-              tool: action.tool,
-              action: governorAction,
-              target: action.resource,
-              params: action.params,
-              reason: data.reason || "Action exceeds risk threshold and requires approval",
-              riskScore: data.score,
-              rules: data.rules,
-            });
-
-            return {
-              allowed: false,
-              verdict: "require_approval",
-              reason: data.reason || "High-risk operation requires human approval",
-              riskScore: data.score,
-              approvalRequest: approvalReq,
-              rules: data.rules || ["RULE_ESCALATE"],
-            };
-          }
-
-          return {
-            allowed: false,
-            verdict: "deny",
-            reason: data.reason || `Governor denied action (score: ${data.score})`,
-            riskScore: data.score,
-            rules: data.rules || ["RULE_DENY"],
-          };
-        }
-      } catch (err) {
-        log("warn", "Governor backend unreachable, evaluating with local zero-trust policy", {
-          error: String(err),
-        });
-      }
-    }
-
-    // 4. Local Deterministic Zero-Trust Policy Engine
-    return this.evaluateLocalRules(action, context);
+    // 3. Local Intelligent Zero-Trust Policy Rules
+    return this.evaluateIntelligentRules(action, context);
   }
 
   /**
-   * Deterministic local policy rules.
+   * Deterministic local intelligent policy engine.
    */
-  private evaluateLocalRules(action: ProposedAction, context: PolicyContext): RuntimePolicyVerdict {
-    // A. Read-only operations — Always allowed within workspace
+  private evaluateIntelligentRules(action: ProposedAction, context: PolicyContext): RuntimePolicyVerdict {
+    const resourceLower = (action.resource || "").toLowerCase();
+
+    // A. Read-only tools — Always permitted within workspace
     if (["hello", "list_project_files", "read_project_file", "search_project_code"].includes(action.tool)) {
       return {
         allowed: true,
         verdict: "allow",
-        reason: `Read-only operation '${action.tool}' permitted by policy.`,
+        reason: `Read-only operation '${action.tool}' permitted within workspace scope.`,
         riskScore: 0.15,
         rules: ["RULE_READ_PERMITTED"],
       };
     }
 
-    // B. Write operations — Require human approval
-    if (["edit_project_file", "create_project_file"].includes(action.tool)) {
+    // B. Check if writing to sensitive infrastructure or security file
+    const isSensitivePath = SENSITIVE_PATH_PATTERNS.some((pattern) => resourceLower.includes(pattern));
+
+    if (isSensitivePath) {
       const approvalReq = this.approvalManager.createRequest({
         userId: context.userId,
         agentSessionId: context.agentSessionId,
         tool: action.tool,
-        action: "file.write",
+        action: "file.write.sensitive",
         target: action.resource,
         params: action.params,
-        reason: `File modification via '${action.tool}' requires human operator authorization.`,
-        riskScore: 0.75,
-        rules: ["RULE_FILE_WRITE_APPROVAL_REQUIRED"],
+        reason: `Modifying sensitive file '${action.resource}' requires operator authorization.`,
+        riskScore: 0.85,
+        rules: ["RULE_SENSITIVE_FILE_APPROVAL_REQUIRED"],
       });
 
       return {
         allowed: false,
         verdict: "require_approval",
-        reason: `File modification via '${action.tool}' requires human approval.`,
-        riskScore: 0.75,
+        reason: `Modifying sensitive configuration/security file '${action.resource}' requires human approval.`,
+        riskScore: 0.85,
         approvalRequest: approvalReq,
-        rules: ["RULE_FILE_WRITE_APPROVAL_REQUIRED"],
+        rules: ["RULE_SENSITIVE_FILE_APPROVAL_REQUIRED"],
       };
     }
 
-    // C. Command execution — Require human approval
+    // C. Routine Reversible UI / Component / Source Code Editing & File Creation
+    if (["edit_project_file", "create_project_file"].includes(action.tool)) {
+      // Ordinary files (e.g. style.css, App.tsx, Button.tsx, index.html, reports) proceed under workspace editing policy
+      return {
+        allowed: true,
+        verdict: "allow",
+        reason: `Routine workspace file modification '${action.resource}' permitted under workspace editing policy with diff tracking.`,
+        riskScore: 0.3,
+        rules: ["RULE_WORKSPACE_EDIT_PERMITTED"],
+      };
+    }
+
+    // D. Command Execution Allowlist Check
     if (action.tool === "run_project_command") {
+      const cmd = String(action.params.command || "").toLowerCase();
+      const args = (action.params.args as string[]) || [];
+      const fullCmd = `${cmd} ${args.join(" ")}`.trim();
+
+      // Safe test & inspection commands are auto-permitted
+      if (
+        fullCmd.startsWith("git status") ||
+        fullCmd.startsWith("git diff") ||
+        fullCmd.startsWith("git log") ||
+        fullCmd.startsWith("npm test") ||
+        fullCmd.startsWith("pytest") ||
+        fullCmd.startsWith("python --version") ||
+        fullCmd.startsWith("node --version")
+      ) {
+        return {
+          allowed: true,
+          verdict: "allow",
+          reason: `Routine developer command '${fullCmd}' permitted by allowlist.`,
+          riskScore: 0.2,
+          rules: ["RULE_COMMAND_ALLOWLIST_PERMITTED"],
+        };
+      }
+
+      // Package installations or custom commands require approval
       const approvalReq = this.approvalManager.createRequest({
         userId: context.userId,
         agentSessionId: context.agentSessionId,
         tool: action.tool,
         action: "code.execute",
-        target: action.resource,
+        target: fullCmd,
         params: action.params,
-        reason: "Terminal command execution requires human operator authorization.",
-        riskScore: 0.85,
-        rules: ["RULE_COMMAND_EXEC_APPROVAL_REQUIRED"],
+        reason: `Executing command '${fullCmd}' requires operator authorization.`,
+        riskScore: 0.8,
+        rules: ["RULE_COMMAND_APPROVAL_REQUIRED"],
       });
 
       return {
         allowed: false,
         verdict: "require_approval",
-        reason: "Command execution requires human approval.",
-        riskScore: 0.85,
+        reason: `Executing command '${fullCmd}' requires human authorization.`,
+        riskScore: 0.8,
         approvalRequest: approvalReq,
-        rules: ["RULE_COMMAND_EXEC_APPROVAL_REQUIRED"],
+        rules: ["RULE_COMMAND_APPROVAL_REQUIRED"],
       };
     }
 
@@ -300,14 +278,18 @@ export class RuntimePolicyEngine {
   private checkHardDeny(action: ProposedAction): string | null {
     const res = action.resource.toLowerCase();
 
-    if (res.includes(".env") || res.includes("id_rsa") || res.includes("/etc/shadow") || res.includes("credentials")) {
+    if (res.includes(".env") || res.includes("id_rsa") || res.includes("/etc/shadow") || res.includes("credentials.json")) {
       return `Access to sensitive credential resource '${action.resource}' is permanently denied.`;
+    }
+
+    if (res.includes("../") || res.includes("..\\")) {
+      return `Path traversal outside project root is permanently denied.`;
     }
 
     if (action.tool === "run_project_command") {
       const cmd = String(action.params.command || "").toLowerCase();
-      if (["rm", "sudo", "curl", "wget", "nc", "netcat", "eval"].includes(cmd)) {
-        return `Command '${cmd}' is blocked by security allowlist policy.`;
+      if (["rm", "sudo", "curl", "wget", "nc", "netcat", "eval", "mkfs", "dd"].includes(cmd)) {
+        return `Destructive/Egress command '${cmd}' is blocked by security policy.`;
       }
     }
 

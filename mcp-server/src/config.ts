@@ -6,10 +6,33 @@
  */
 
 import { resolve } from "path";
+import { existsSync } from "fs";
+
+function getInitialProjectRoot(): string {
+  if (process.env.PROJECT_ROOT && existsSync(process.env.PROJECT_ROOT)) {
+    return resolve(process.env.PROJECT_ROOT);
+  }
+  const candidates = [
+    process.cwd(),
+    resolve(process.cwd(), ".."),
+    resolve(process.cwd(), "..", ".."),
+  ];
+  for (const dir of candidates) {
+    if (existsSync(resolve(dir, "governor")) && existsSync(resolve(dir, "mcp-server"))) {
+      return dir;
+    }
+  }
+  for (const dir of candidates) {
+    if (existsSync(resolve(dir, ".git"))) {
+      return dir;
+    }
+  }
+  return process.cwd();
+}
 
 export const config = {
   /** Absolute path to the registered project workspace */
-  projectRoot: resolve(process.env.PROJECT_ROOT || process.cwd()),
+  projectRoot: getInitialProjectRoot(),
 
   /** Governor API base URL for policy evaluation */
   governorUrl: process.env.GOVERNOR_URL || "http://localhost:8000",
