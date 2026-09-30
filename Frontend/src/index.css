@@ -1,0 +1,278 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --cyber-bg: #0a0a0f;
+    --cyber-fg: #e0e0e0;
+    --cyber-card: #12121a;
+    --cyber-muted: #1c1c2e;
+    --cyber-muted-fg: #6b7280;
+    --cyber-accent: #00ff88;
+    --cyber-accent-secondary: #ff00ff;
+    --cyber-accent-tertiary: #00d4ff;
+    --cyber-border: #2a2a3a;
+    --cyber-input: #12121a;
+    --cyber-ring: #00ff88;
+    --cyber-destructive: #ff3366;
+
+    --box-shadow-neon: 0 0 6px #00ff88, 0 0 14px rgba(0, 255, 136, 0.4);
+    --box-shadow-neon-sm: 0 0 3px #00ff88, 0 0 8px rgba(0, 255, 136, 0.3);
+    --box-shadow-neon-lg: 0 0 10px #00ff88, 0 0 25px rgba(0, 255, 136, 0.5), 0 0 50px rgba(0, 255, 136, 0.25);
+    --box-shadow-neon-secondary: 0 0 6px #ff00ff, 0 0 16px rgba(255, 0, 255, 0.4);
+    --box-shadow-neon-tertiary: 0 0 6px #00d4ff, 0 0 16px rgba(0, 212, 255, 0.4);
+  }
+
+  body {
+    background-color: var(--cyber-bg);
+    color: var(--cyber-fg);
+    font-family: "JetBrains Mono", monospace;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .font-heading {
+    font-family: "Orbitron", monospace;
+  }
+
+  .font-tech {
+    font-family: "Share Tech Mono", monospace;
+  }
+}
+
+/* Chamfered Corners */
+.cyber-chamfer {
+  clip-path: polygon(
+    0 10px,
+    10px 0,
+    calc(100% - 10px) 0,
+    100% 10px,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    10px 100%,
+    0 calc(100% - 10px)
+  );
+}
+
+.cyber-chamfer-sm {
+  clip-path: polygon(
+    0 6px,
+    6px 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% calc(100% - 6px),
+    calc(100% - 6px) 100%,
+    6px 100%,
+    0 calc(100% - 6px)
+  );
+}
+
+.cyber-chamfer-angled {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 14px) 0,
+    100% 14px,
+    100% 100%,
+    14px 100%,
+    0 calc(100% - 14px)
+  );
+}
+
+/* CRT Scanlines Overlay */
+.cyber-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.35) 2px,
+    rgba(0, 0, 0, 0.35) 4px
+  );
+}
+
+/* Tech Grids */
+.cyber-grid {
+  background-image:
+    linear-gradient(rgba(0, 255, 136, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 136, 0.035) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.cyber-grid-cyan {
+  background-image:
+    linear-gradient(rgba(0, 212, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Neon Glow Utilities */
+.neon-glow {
+  box-shadow: var(--box-shadow-neon);
+}
+
+.neon-glow-sm {
+  box-shadow: var(--box-shadow-neon-sm);
+}
+
+.neon-glow-lg {
+  box-shadow: var(--box-shadow-neon-lg);
+}
+
+.neon-glow-magenta {
+  box-shadow: var(--box-shadow-neon-secondary);
+}
+
+.neon-glow-cyan {
+  box-shadow: var(--box-shadow-neon-tertiary);
+}
+
+.neon-text-glow {
+  text-shadow: 0 0 8px rgba(0, 255, 136, 0.6), 0 0 20px rgba(0, 255, 136, 0.3);
+}
+
+.neon-text-magenta {
+  text-shadow: 0 0 8px rgba(255, 0, 255, 0.6), 0 0 20px rgba(255, 0, 255, 0.3);
+}
+
+.neon-text-cyan {
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.6), 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+/* Chromatic Aberration & Glitch */
+.cyber-glitch {
+  position: relative;
+  display: inline-block;
+}
+
+.cyber-glitch::before,
+.cyber-glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  clip: rect(0, 0, 0, 0);
+}
+
+.cyber-glitch::before {
+  left: -2px;
+  text-shadow: 2px 0 #ff00ff;
+  animation: glitch-anim-1 3s infinite linear alternate-reverse;
+}
+
+.cyber-glitch::after {
+  left: 2px;
+  text-shadow: -2px 0 #00d4ff;
+  animation: glitch-anim-2 2.4s infinite linear alternate-reverse;
+}
+
+@keyframes glitch-anim-1 {
+  0% {
+    clip: rect(10px, 9999px, 30px, 0);
+    transform: skew(0.3deg);
+  }
+  20% {
+    clip: rect(40px, 9999px, 55px, 0);
+    transform: skew(-0.5deg);
+  }
+  40% {
+    clip: rect(80px, 9999px, 95px, 0);
+    transform: skew(0.4deg);
+  }
+  60% {
+    clip: rect(15px, 9999px, 35px, 0);
+    transform: skew(-0.2deg);
+  }
+  80% {
+    clip: rect(65px, 9999px, 80px, 0);
+    transform: skew(0.6deg);
+  }
+  100% {
+    clip: rect(5px, 9999px, 25px, 0);
+    transform: skew(0.1deg);
+  }
+}
+
+@keyframes glitch-anim-2 {
+  0% {
+    clip: rect(60px, 9999px, 75px, 0);
+    transform: skew(-0.4deg);
+  }
+  25% {
+    clip: rect(5px, 9999px, 20px, 0);
+    transform: skew(0.5deg);
+  }
+  50% {
+    clip: rect(90px, 9999px, 110px, 0);
+    transform: skew(-0.3deg);
+  }
+  75% {
+    clip: rect(30px, 9999px, 45px, 0);
+    transform: skew(0.2deg);
+  }
+  100% {
+    clip: rect(70px, 9999px, 85px, 0);
+    transform: skew(-0.1deg);
+  }
+}
+
+/* Blinking Cursor */
+@keyframes cyber-blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+.cyber-cursor {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.1em;
+  background-color: #00ff88;
+  vertical-align: middle;
+  margin-left: 2px;
+  animation: cyber-blink 1s step-end infinite;
+  box-shadow: 0 0 6px #00ff88;
+}
+
+/* Skeleton Loading Animations */
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes skeleton-wave {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton {
+  will-change: opacity, background-position;
+}
+
+/* Reduced Motion Safety */
+@media (prefers-reduced-motion: reduce) {
+  .cyber-glitch::before,
+  .cyber-glitch::after {
+    animation: none;
+    clip: auto;
+    display: none;
+  }
+  .cyber-cursor {
+    animation: none;
+    opacity: 1;
+  }
+  .skeleton {
+    animation: none !important;
+    opacity: 0.5;
+  }
+}
+
