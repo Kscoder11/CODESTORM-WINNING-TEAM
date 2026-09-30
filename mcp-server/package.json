@@ -6,8 +6,11 @@
   "scripts": {
     "build": "tsc",
     "mcp": "tsx src/server.ts",
+    "web": "tsx src/web-server.ts",
     "dev": "tsx --watch src/server.ts",
-    "test": "tsx src/test-runner.ts"
+    "test": "tsx src/test-runner.ts",
+    "test:client": "tsx src/client/test-connection.ts",
+    "test:e2e": "tsx src/e2e-test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

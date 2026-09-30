@@ -1,210 +1,120 @@
-# PNG5 MCP Server — OpenCode Integration
+# PNG5 Agent Permission Governor — MCP Server & Website Integration
 
-Custom MCP (Model Context Protocol) server for the PNG5 Agent Permission Governor. Exposes controlled tools to OpenCode agents, enforcing runtime policy decisions through the Governor's authorization pipeline.
+Production-grade integration of the **TypeScript Model Context Protocol (MCP) Server**, **AI Agent Orchestrator**, **Prompt Identification Middleware**, **Runtime Policy Engine**, and **Web Security Console**.
 
-## Architecture
+---
 
-```text
-OpenCode (MCP client)
-    │  stdio transport
-    ▼
-mcp-server/ (Node.js/TypeScript)
-    ├── hello                → Connectivity check
-    ├── list_project_files   → List workspace files
-    ├── read_project_file    → Read authorized files
-    ├── search_project_code  → Search source code
-    ├── edit_project_file    → Edit files (approval required)
-    ├── create_project_file  → Create files (approval required)
-    └── run_project_command  → Run commands (strict allowlist)
-    │
-    ▼
-Policy Evaluator
-    │  HTTP to Governor API
-    ▼
-Governor (FastAPI backend)
-    ├── Canonicalization
-    ├── Hard-deny rules (HD1-HD10)
-    ├── Risk scoring
-    ├── Approval lifecycle
-    └── Hash-chained audit
+## 🏗️ Architecture & Request Flow
+
+```
+[ User on Website UI ] (http://localhost:3000)
+         │
+         │ (POST /api/chat)
+         ▼
+[ Prompt Identification Middleware ]
+   ├── Intent Classification (read, search, edit, create, execute)
+   ├── Prompt Injection / Jailbreak Detection
+   └── Risk Scoring & Initial Categorization
+         │
+         ▼
+[ AI Agent Orchestrator (ReAct Loop) ]
+   ├── Configurable LLM Provider (OpenAI / Anthropic / Gemini / Heuristic)
+   ├── Multi-step Reasoning & Tool Candidate Selection
+   └── Response Synthesis
+         │
+         ▼
+[ Runtime Policy Engine ]
+   ├── Execution Boundary Verification
+   ├── Hard-Deny Checks (.env, id_rsa, /etc/shadow, system binaries)
+   ├── Governor Integration (POST http://localhost:8000/v1/actions)
+   └── Human Approval Escalation & Anti-Replay Redemption
+         │
+   ┌─────┴──────────────────────────────────────────────────────┐
+   │ ALLOW                                                      │ REQUIRE_APPROVAL
+   ▼                                                            ▼
+[ TypeScript MCP Client ]                                [ Approval Modal on Website ]
+   │ (StdioClientTransport)                                     │ (Human Reviews & Decides)
+   ▼                                                            ▼
+[ TypeScript MCP Server ]                                [ Resumes with Approval Token ]
+   ├── hello
+   ├── list_project_files
+   ├── read_project_file
+   ├── search_project_code
+   ├── edit_project_file
+   ├── create_project_file
+   └── run_project_command
+         │
+         ▼
+[ Target Result / Audit Trail ] ─────────> [ Real-time Website Display ]
 ```
 
-## Quick Start
+---
 
-### Prerequisites
+## 🛠️ The 7 Governed MCP Tools
 
-- Node.js >= 18
-- Python 3.11+ (for Governor backend)
+| Tool | Action Category | Permission Level | Key Security Guardrails |
+| :--- | :--- | :--- | :--- |
+| `hello` | `system.status` | 🟢 Read-Only | Safe connectivity check & diagnostic handshake |
+| `list_project_files` | `file.read` | 🟢 Read-Only | Workspace containment, dotfile/build artifact filtering |
+| `read_project_file` | `file.read` | 🟢 Read-Only | Blocks `.env`, `id_rsa`, `.pem`, tokens; 1 MB file limit |
+| `search_project_code` | `file.read` | 🟢 Read-Only | Workspace boundary validation, 100-match cap |
+| `edit_project_file` | `file.write` | 🟡 Approval Gated | Exact text chunk replacement; requires human approval |
+| `create_project_file` | `file.write` | 🟡 Approval Gated | Prevents overwrite without explicit flag; requires human approval |
+| `run_project_command` | `code.execute` | 🔴 Strict Allowlist | Allowlisted commands only (`git`, `node`, `npm`, `pytest`, `python`, `ls`, etc.) via `execFile` (no shell spawn); 5s hard timeout |
 
-### 1. Install MCP Server Dependencies
+---
 
-```bash
-cd mcp-server
+## 🚀 Quickstart & Local Execution
+
+### 1. Install Dependencies & Build
+```powershell
+cd d:\CODESTORM-WINNING-TEAM\mcp-server
 npm install
-```
-
-### 2. Start the Governor Backend
-
-```bash
-# From repository root
-pip install -r requirements.txt
-python -m governor.main
-```
-
-The Governor runs on `http://localhost:8000`.
-
-### 3. Configure OpenCode
-
-The `opencode.json` in the repository root configures OpenCode to launch the MCP server:
-
-```json
-{
-  "mcp": {
-    "servers": {
-      "png5-policy": {
-        "type": "local",
-        "command": ["npm", "run", "mcp"],
-        "cwd": "./mcp-server",
-        "environment": {
-          "PROJECT_ROOT": ".",
-          "GOVERNOR_URL": "http://localhost:8000"
-        }
-      }
-    }
-  }
-}
-```
-
-### 4. Launch OpenCode
-
-```bash
-opencode
-```
-
-### 5. Verify Connection
-
-```bash
-# List MCP servers
-opencode mcp list
-
-# Test connectivity
-# In OpenCode, ask: "Use the hello tool with my name"
-```
-
-## Environment Variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `PROJECT_ROOT` | Current directory | Registered project workspace path |
-| `GOVERNOR_URL` | `http://localhost:8000` | Governor API URL |
-| `ORCHESTRATOR_KEY` | `orch_key_secret_123` | Orchestrator API key |
-| `AGENT_SESSION_TOKEN` | (empty) | Agent session token from Governor |
-| `MCP_USER_ID` | `mcp-opencode-agent` | User identity for audit |
-| `MAX_FILE_READ_SIZE` | `1048576` (1 MB) | Maximum file read size |
-| `MAX_FILE_WRITE_SIZE` | `524288` (512 KB) | Maximum file write size |
-| `COMMAND_TIMEOUT` | `5000` (5s) | Command execution timeout |
-
-## Tools
-
-### Read-Only (Allowed by Default)
-
-| Tool | Description |
-|---|---|
-| `hello` | Connectivity check |
-| `list_project_files` | List files in workspace (recursive, filtered) |
-| `read_project_file` | Read file content (line range support) |
-| `search_project_code` | Regex code search across source files |
-
-### Write Operations (Approval Required)
-
-| Tool | Description |
-|---|---|
-| `edit_project_file` | Modify existing file (shows diff to approver) |
-| `create_project_file` | Create new file (won't overwrite existing) |
-| `run_project_command` | Execute allowlisted command with sandboxing |
-
-## Security Controls
-
-### Workspace Containment
-- Path traversal defense (../ sequences)
-- Per-component symlink detection
-- Realpath boundary validation
-- Secret file pattern rejection (.env, credentials, keys, tokens)
-
-### Command Execution
-- Strict command allowlist (ls, cat, grep, python, node, git, etc.)
-- Shell metacharacter rejection (no pipes, redirects, subshells)
-- Dangerous argument blocking (--exec, -rf, sudo, etc.)
-- `execFile` — no shell spawned
-- Hard timeout (5s default)
-- Output truncation (64 KB max)
-- Minimal environment (only PATH, HOME, LANG)
-
-### Policy Enforcement
-- Every protected tool routes through the centralized policy evaluator
-- Governor integration for full authorization pipeline
-- Fail-closed behavior when Governor is unreachable
-- Local fallback policy for standalone testing
-- Audit logging of all decisions and outcomes
-
-### Model Trust Boundary
-- Model cannot supply identity, project authorization, or approval status
-- API keys and secrets never exposed in tool results
-- Audit log values sanitized for credential patterns
-
-## Running Tests
-
-```bash
-cd mcp-server
-npm test
-```
-
-Tests cover:
-- ✅ Valid path resolution
-- ✅ Path traversal blocking
-- ✅ Secret file access denial
-- ✅ Symlink escape prevention (when available)
-- ✅ File size limit enforcement
-- ✅ Command allowlist enforcement
-- ✅ Shell injection blocking
-- ✅ Dangerous argument rejection
-- ✅ Audit log functionality
-
-## Development
-
-```bash
-# Watch mode (auto-restart on changes)
-cd mcp-server
-npm run dev
-
-# Build TypeScript
 npm run build
 ```
 
-## File Structure
+### 2. Run Test Suites
+```powershell
+# 1. Run MCP Security & Tool Unit Tests (20/20 tests)
+npm test
 
-```text
-mcp-server/
-├── package.json
-├── tsconfig.json
-└── src/
-    ├── server.ts              # Main entry point
-    ├── config.ts              # Configuration from env vars
-    ├── test-runner.ts         # Security test suite
-    ├── policy/
-    │   ├── types.ts           # Policy type definitions
-    │   └── evaluator.ts       # Centralized policy evaluator
-    ├── security/
-    │   ├── workspace.ts       # Workspace path validation
-    │   └── command-guard.ts   # Command allowlist & sanitization
-    ├── audit/
-    │   └── logger.ts          # Audit event recording
-    └── tools/
-        ├── hello.ts           # Connectivity check
-        ├── list-files.ts      # List project files
-        ├── read-file.ts       # Read authorized files
-        ├── search-code.ts     # Search source code
-        ├── edit-file.ts       # Edit files (approval-gated)
-        ├── create-file.ts     # Create files (approval-gated)
-        └── run-command.ts     # Run commands (strict allowlist)
+# 2. Run MCP Client <-> Server Diagnostic Suite (15/15 tests)
+npm run test:client
+
+# 3. Run Complete 15-Scenario End-to-End Suite (18/18 tests)
+npm run test:e2e
 ```
+
+### 3. Launch Governor Backend (FastAPI)
+```powershell
+cd d:\CODESTORM-WINNING-TEAM
+python -m governor.main
+```
+*Governor active on `http://localhost:8000`.*
+
+### 4. Launch Website & API Server
+```powershell
+cd d:\CODESTORM-WINNING-TEAM\mcp-server
+npm run web
+```
+*Open **`http://localhost:3000`** in your browser to interact with the full web console.*
+
+---
+
+## 🌐 Website Features
+
+- **Interactive AI Chat Assistant**: Submit natural language prompts, view step-by-step progress, policy outcome badges (`ALLOW`, `APPROVAL REQUIRED`, `DENY`), and tool execution results.
+- **Human Approval Modal**: When a sensitive tool (such as file creation, editing, or command execution) is proposed, an interactive modal presents the action details, target resource, risk score, and rule breakdown with 1-click **Approve** and **Reject** buttons.
+- **Live SOC Metrics**: Real-time counter of total actions, allowed requests, escalations, and denials.
+- **Cryptographic Audit Viewer**: Real-time log of all policy decisions, timestamps, and resource targets.
+- **Quick Scenario Launcher**: 1-click pre-filled prompts to test benign file reads, code searches, approvals, credential exfiltration denials, and jailbreak blocks.
+
+---
+
+## 🔒 Security & Hard-Deny Guarantees
+
+1. **Zero Shell Vulnerability**: Terminal commands are executed directly through `execFile` with structured arguments, neutralizing shell metacharacter injection.
+2. **Workspace Containment**: Strict realpath resolution and per-component symlink checks prevent directory traversal (`../`) attacks.
+3. **Sensitive Credential Shield**: Access to `.env`, `id_rsa`, `/etc/shadow`, API keys, and token patterns is permanently blocked.
+4. **Anti-Replay Approvals**: Approvals are bound to one-time tokens with a 5-minute TTL. Once redeemed or expired, they cannot be reused.
+5. **Fail-Closed Design**: If policy services are unreachable, requests default to DENY.
