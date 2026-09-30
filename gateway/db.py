@@ -11,7 +11,6 @@ def get_db_connection():
 def execute_read_query(query: str, params: tuple = ()) -> List[Dict[str, Any]]:
     if "INSERT" in query.upper() or "UPDATE" in query.upper() or "DELETE" in query.upper():
         raise PermissionError("Write operations not allowed in read query")
-        
     conn = get_db_connection()
     try:
         cursor = conn.cursor()

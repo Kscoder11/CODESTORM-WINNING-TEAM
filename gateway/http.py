@@ -25,7 +25,6 @@ def is_safe_ip(ip_str):
 def secure_http_request(url, method="GET", data=None, headers=None, max_redirects=5):
     if headers is None:
         headers = {}
-        
     current_url = url
     redirects_followed = 0
 
@@ -33,7 +32,6 @@ def secure_http_request(url, method="GET", data=None, headers=None, max_redirect
         parsed_url = urllib.parse.urlparse(current_url)
         if parsed_url.scheme not in ["http", "https"]:
             raise ValueError("Only HTTP/HTTPS allowed")
-            
         domain = parsed_url.hostname
         if not is_allowed_domain(domain):
             raise PermissionError(f"Domain {domain} is not in the allowed list")
@@ -53,11 +51,9 @@ def secure_http_request(url, method="GET", data=None, headers=None, max_redirect
                     return None
             opener = urllib.request.build_opener(NoRedirectHandler)
             response = opener.open(req, timeout=TIMEOUT)
-            
             body = response.read(MAX_RESPONSE_SIZE + 1)
             if len(body) > MAX_RESPONSE_SIZE:
                 raise ValueError("Response exceeds 1MB limit")
-                
             return {"status": response.status, "headers": dict(response.headers), "body": body}
 
         except HTTPError as e:
@@ -70,5 +66,4 @@ def secure_http_request(url, method="GET", data=None, headers=None, max_redirect
                 if len(body) > MAX_RESPONSE_SIZE:
                     raise ValueError("Response exceeds 1MB limit")
                 return {"status": e.code, "headers": dict(e.headers), "body": body}
-                
     raise ValueError("Too many redirects")
