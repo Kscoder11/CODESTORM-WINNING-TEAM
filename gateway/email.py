@@ -16,7 +16,6 @@ def secure_send_email(to_address: str, subject: str, body: str):
         domain = to_address.split('@')[1]
     except IndexError:
         raise ValueError("Invalid email address format")
-
     if domain.lower() not in ALLOWED_EMAIL_DOMAINS:
         raise PermissionError(f"Email domain {domain} is not approved")
 
@@ -28,7 +27,6 @@ def secure_send_email(to_address: str, subject: str, body: str):
         "body": body,
         "timestamp": datetime.utcnow().isoformat()
     }
-    
     file_path = os.path.join(OUTBOX_DIR, f"{email_id}.json")
     with open(file_path, 'w') as f:
         json.dump(email_data, f)

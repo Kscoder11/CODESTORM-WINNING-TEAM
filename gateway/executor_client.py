@@ -23,14 +23,12 @@ def execute_code(code: str, session_id: str, timeout: int = 5) -> dict:
             "Binds": [f"/workspace/{session_id}:/workspace"]
         }
     }
-    
     req = urllib.request.Request(
         create_url,
         data=json.dumps(container_config).encode('utf-8'),
         headers={'Content-Type': 'application/json'},
         method="POST"
     )
-    
     try:
         response = urllib.request.urlopen(req)
         container_data = json.loads(response.read().decode('utf-8'))
@@ -47,7 +45,6 @@ def execute_code(code: str, session_id: str, timeout: int = 5) -> dict:
         
     wait_url = f"{DOCKER_API_URL}/containers/{container_id}/wait"
     req = urllib.request.Request(wait_url, method="POST")
-    
     try:
         response = urllib.request.urlopen(req, timeout=timeout)
         wait_data = json.loads(response.read().decode('utf-8'))
@@ -74,5 +71,4 @@ def execute_code(code: str, session_id: str, timeout: int = 5) -> dict:
         urllib.request.urlopen(urllib.request.Request(delete_url, method="DELETE"))
     except:
         pass
-        
     return {"stdout": logs_text, "stderr": "", "returncode": returncode}
