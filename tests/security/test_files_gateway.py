@@ -18,7 +18,10 @@ def test_symlink_rejected(tmp_path):
     target_file.write_text("hello")
     symlink_file = tmp_path / "symlink.txt"
     try:
-        os.symlink(target_file, symlink_file)
+        try:
+            os.symlink(target_file, symlink_file)
+        except OSError:
+            pytest.skip("Symlink creation not permitted in this environment")
         with pytest.raises(PermissionError, match="Symlinks are not allowed"):
             open_secure_file(str(symlink_file), mode="r")
     finally:

@@ -67,7 +67,7 @@ def canonicalize_file_target(target: str, workspace_root: Path = settings.WORKSP
         path_obj = (workspace_root / normalized).resolve()
     else:
         path_obj = Path(normalized).resolve()
-        
+    
     resolved_str = str(path_obj)
     ws_root_str = str(workspace_root.resolve())
     

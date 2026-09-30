@@ -1,0 +1,24 @@
+{
+  "name": "png5-mcp-server",
+  "version": "1.0.0",
+  "description": "PNG5 Policy Gateway MCP Server — Controlled tool execution for OpenCode agents",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "mcp": "tsx src/server.ts",
+    "web": "tsx src/web-server.ts",
+    "dev": "tsx --watch src/server.ts",
+    "test": "tsx src/test-runner.ts",
+    "test:client": "tsx src/client/test-connection.ts",
+    "test:e2e": "tsx src/e2e-test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
