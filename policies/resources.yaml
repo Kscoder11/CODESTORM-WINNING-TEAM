@@ -1,0 +1,59 @@
+# Resource Registry Definitions
+# Pattern matching uses fnmatch style glob matching against target strings.
+# Unknown targets default to: trust=untrusted, sensitivity=restricted, env=prod
+
+resources:
+  - pattern: "file:/workspace/public/*"
+    trust: "trusted"
+    sensitivity: "public"
+    env: "dev"
+
+  - pattern: "file:/workspace/reports/*"
+    trust: "internal"
+    sensitivity: "internal"
+    env: "dev"
+
+  - pattern: "file:/workspace/uploads/*"
+    trust: "untrusted"
+    sensitivity: "internal"
+    env: "dev"
+
+  - pattern: "file:/workspace/out/*"
+    trust: "internal"
+    sensitivity: "internal"
+    env: "dev"
+
+  - pattern: "file:/workspace/*"
+    trust: "internal"
+    sensitivity: "internal"
+    env: "dev"
+
+  - pattern: "db:prod/*"
+    trust: "internal"
+    sensitivity: "confidential"
+    env: "prod"
+
+  - pattern: "db:staging/*"
+    trust: "internal"
+    sensitivity: "internal"
+    env: "staging"
+
+  - pattern: "http:news.local/*"
+    trust: "untrusted"
+    sensitivity: "public"
+    env: "dev"
+
+  - pattern: "http:docs.local/*"
+    trust: "external"
+    sensitivity: "public"
+    env: "dev"
+
+  - pattern: "http:api.internal.local/*"
+    trust: "internal"
+    sensitivity: "internal"
+    env: "dev"
+
+  - pattern: "mail:inbox"
+    trust: "untrusted"
+    sensitivity: "internal"
+    env: "dev"
