@@ -1,0 +1,28 @@
+# System Policies and Allowlists
+version: "1.0"
+mode: "full"
+
+egress_allowlist:
+  http.get:
+    - "docs.local"
+    - "news.local"
+  http.post:
+    - "api.internal.local"
+  email.send:
+    - "internal.local"
+    - "company.local"
+
+secret_patterns:
+  - "*.env"
+  - "*secret*"
+  - "*credentials*"
+  - "/etc/shadow"
+  - "~/.ssh/*"
+  - "*id_rsa*"
+
+limits:
+  max_body_bytes: 65536
+  max_execution_ms: 5000
+  approval_ttl_seconds: 300
+  session_default_ttl: 3600
+  max_rows_default: 100
