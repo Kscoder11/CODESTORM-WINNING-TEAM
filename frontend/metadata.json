@@ -1,0 +1,6 @@
+{
+  "name": "PNG5 — Agent Permission Governor",
+  "description": "Production-grade AI Agent Runtime Security and Permission Governor. Enforcing least-privilege, hard-deny rules HD1-HD10, explainable risk scoring, human-in-the-loop approvals, and cryptographic audit logging.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
