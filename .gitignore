@@ -4,3 +4,8 @@ governor.db-wal
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# MCP Server
+mcp-server/node_modules/
+mcp-server/dist/
+mcp-server/__test_workspace__/
