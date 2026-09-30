@@ -1,0 +1,6 @@
+governor.db
+governor.db-shm
+governor.db-wal
+__pycache__/
+*.pyc
+.pytest_cache/
