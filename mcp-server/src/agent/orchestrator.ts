@@ -15,6 +15,7 @@ import { getMCPClient, PNG5MCPClient, MCPToolCallResult } from "../client/mcp-cl
 import { identifyPrompt, PromptAnalysisResult } from "../middleware/prompt-identifier.js";
 import { getRuntimePolicyEngine, RuntimePolicyEngine, RuntimePolicyVerdict } from "../policy/runtime-policy.js";
 import { LLMProvider, ModelPlanStep } from "./llm-provider.js";
+import { agentEvents } from "../events.js";
 import type { HumanApprovalRequest } from "../approvals/approval-manager.js";
 
 export interface AgentExecutionStep {
@@ -46,8 +47,24 @@ export interface AgentRunOptions {
   agentSessionId?: string;
   agentSessionToken?: string;
   approvalId?: string | null;
+  workspaceId?: string;
+  workspaceRoot?: string;
   maxIterations?: number;
   timeoutMs?: number;
+}
+
+/** Strip large/sensitive values from tool arguments before emitting events. */
+function safeArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (key === "approval_id") continue;
+    if (typeof value === "string" && value.length > 300) {
+      out[key] = `${value.slice(0, 300)}… [${value.length} chars]`;
+    } else if (value !== undefined) {
+      out[key] = value;
+    }
+  }
+  return out;
 }
 
 export class AgentOrchestrator {
@@ -63,9 +80,66 @@ export class AgentOrchestrator {
 
   /**
    * Run the end-to-end agent execution pipeline.
+   * Emits real lifecycle events to connected SSE subscribers.
    */
   public async run(prompt: string, options: AgentRunOptions = {}): Promise<AgentExecutionResult> {
     const startTime = Date.now();
+    const userId = options.userId || "web-user";
+
+    agentEvents.emit("run_started", {
+      prompt,
+      userId,
+      workspaceId: options.workspaceId || null,
+      workspaceRoot: options.workspaceRoot || null,
+      approvalId: options.approvalId || null,
+      resumed: Boolean(options.approvalId),
+    });
+
+    if (options.workspaceRoot) {
+      agentEvents.emit("workspace_validated", {
+        workspaceId: options.workspaceId || null,
+        root: options.workspaceRoot,
+        status: "validated",
+      });
+    }
+
+    let result: AgentExecutionResult;
+    try {
+      result = await this.execute(prompt, options, startTime);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log("error", "Agent orchestrator run crashed", { error: message });
+      result = {
+        status: "error",
+        prompt,
+        promptAnalysis: identifyPrompt(prompt, userId),
+        finalResponse: `⚠️ **System Error**: ${message}`,
+        steps: [],
+        totalSteps: 0,
+        durationMs: Date.now() - startTime,
+        error: message,
+      };
+    }
+
+    agentEvents.emit("run_completed", {
+      status: result.status,
+      totalSteps: result.totalSteps,
+      durationMs: result.durationMs,
+      error: result.error || null,
+      workspaceId: options.workspaceId || null,
+    });
+
+    return result;
+  }
+
+  /**
+   * Internal execution pipeline (single run of the ReAct loop).
+   */
+  private async execute(
+    prompt: string,
+    options: AgentRunOptions,
+    startTime: number
+  ): Promise<AgentExecutionResult> {
     const userId = options.userId || "web-user";
     const maxIterations = options.maxIterations || 5;
     const timeoutMs = options.timeoutMs || 30000;
@@ -74,6 +148,18 @@ export class AgentOrchestrator {
 
     // Step 1: Prompt Identification & Security Middleware
     const promptAnalysis = identifyPrompt(prompt, userId);
+
+    agentEvents.emit("prompt_classified", {
+      operation: promptAnalysis.operation,
+      intent: promptAnalysis.intent.slice(0, 200),
+      riskLevel: promptAnalysis.riskLevel,
+      riskScore: promptAnalysis.riskScore,
+      decision: promptAnalysis.initialDecision,
+      reason: promptAnalysis.reason,
+      candidateTools: promptAnalysis.candidateTools,
+      targetResources: promptAnalysis.targetResources,
+      injections: promptAnalysis.detectedInjections,
+    });
 
     if (!promptAnalysis.valid || promptAnalysis.initialDecision === "deny") {
       log("warn", "Prompt rejected by Prompt Identification Middleware", { reason: promptAnalysis.reason });
@@ -121,7 +207,12 @@ export class AgentOrchestrator {
     }
 
     const availableTools = this.mcpClient.getTools();
-    const history: Array<{ role: string; content: string; toolResult?: unknown }> = [];
+    agentEvents.emit("mcp_connected", {
+      toolCount: availableTools.length,
+      tools: availableTools.map((t) => t.name),
+    });
+
+    const history: Array<{ role: string; content: string; toolResult?: unknown; toolName?: string }> = [];
     const executionSteps: AgentExecutionStep[] = [];
 
     // Step 3: ReAct Orchestration Loop
@@ -148,6 +239,11 @@ export class AgentOrchestrator {
         const finalResponse = plan.finalResponse || "Task completed successfully.";
         log("info", "Agent reached final synthesis", { totalSteps: executionSteps.length });
 
+        agentEvents.emit("response_synthesized", {
+          steps: executionSteps.length,
+          excerpt: finalResponse.slice(0, 400),
+        });
+
         return {
           status: "completed",
           prompt,
@@ -162,7 +258,22 @@ export class AgentOrchestrator {
       // Step 4: Runtime Policy Engine Check at Execution Boundary
       const toolName = plan.tool;
       const toolArgs = plan.arguments || {};
-      const targetResource = String(toolArgs.path || toolArgs.directory || toolArgs.command || toolName);
+      // Bind approvals to the exact target: file path for file tools, the full
+      // command line for exec tools (so args are part of the binding).
+      const targetResource =
+        toolName === "run_project_command"
+          ? `exec:${String(toolArgs.command || "")} ${
+              (Array.isArray(toolArgs.args) ? (toolArgs.args as string[]) : []).join(" ")
+            }`.trim()
+          : String(toolArgs.path || toolArgs.directory || toolArgs.command || toolName);
+
+      agentEvents.emit("plan_proposed", {
+        step: iteration,
+        tool: toolName,
+        target: targetResource,
+        thought: plan.thought,
+        arguments: safeArgs(toolArgs),
+      });
 
       const policyVerdict = await this.policyEngine.evaluate(
         {
@@ -178,6 +289,18 @@ export class AgentOrchestrator {
           approvalId: options.approvalId,
         }
       );
+
+      agentEvents.emit("policy_verdict", {
+        step: iteration,
+        tool: toolName,
+        target: targetResource,
+        verdict: policyVerdict.verdict,
+        allowed: policyVerdict.allowed,
+        reason: policyVerdict.reason,
+        riskScore: policyVerdict.riskScore,
+        rules: policyVerdict.rules,
+        approvalId: policyVerdict.approvalRequest?.id || policyVerdict.approvalId || null,
+      });
 
       // Case A: Approval Required (Pause execution & return approval ticket)
       if (policyVerdict.verdict === "require_approval") {
@@ -195,6 +318,14 @@ export class AgentOrchestrator {
         log("info", "Agent execution paused for human approval", {
           tool: toolName,
           approvalId: policyVerdict.approvalRequest?.id,
+        });
+
+        agentEvents.emit("approval_required", {
+          approval: policyVerdict.approvalRequest || null,
+          tool: toolName,
+          target: targetResource,
+          reason: policyVerdict.reason,
+          riskScore: policyVerdict.riskScore,
         });
 
         return {
@@ -236,9 +367,26 @@ export class AgentOrchestrator {
       }
 
       // Case C: Allowed — Execute MCP Tool through Client
+      // When granted through a human approval, the one-time ticket travels
+      // with the call so the tool process can redeem it atomically.
+      const callArgs: Record<string, unknown> =
+        policyVerdict.approvalId && !toolArgs.approval_id
+          ? { ...toolArgs, approval_id: policyVerdict.approvalId }
+          : toolArgs;
+
+      agentEvents.emit("tool_executing", {
+        step: iteration,
+        tool: toolName,
+        target: targetResource,
+        arguments: safeArgs(callArgs),
+        viaApproval: Boolean(policyVerdict.approvalId),
+      });
+
       try {
         log("info", `Executing approved MCP tool '${toolName}'`, { toolArgs });
-        const toolResult = await this.mcpClient.callTool(toolName, toolArgs);
+        const toolStart = Date.now();
+        const toolResult = await this.mcpClient.callTool(toolName, callArgs);
+        const toolDuration = Date.now() - toolStart;
 
         const step: AgentExecutionStep = {
           stepNumber: iteration,
@@ -252,11 +400,21 @@ export class AgentOrchestrator {
         };
         executionSteps.push(step);
 
+        agentEvents.emit("tool_completed", {
+          step: iteration,
+          tool: toolName,
+          target: targetResource,
+          isError: Boolean(toolResult.isError),
+          durationMs: toolDuration,
+          outputSummary: (toolResult.content?.[0]?.text || "").slice(0, 600),
+        });
+
         // Update history for next iteration
         history.push({
           role: "assistant",
           content: plan.thought,
           toolResult,
+          toolName,
         });
 
       } catch (err) {
@@ -271,6 +429,15 @@ export class AgentOrchestrator {
           timestamp: new Date().toISOString(),
         };
         executionSteps.push(step);
+
+        agentEvents.emit("tool_completed", {
+          step: iteration,
+          tool: toolName,
+          target: targetResource,
+          isError: true,
+          durationMs: 0,
+          error: message,
+        });
 
         return {
           status: "error",

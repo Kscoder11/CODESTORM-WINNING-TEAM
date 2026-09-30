@@ -44,17 +44,95 @@ function mapOutcome(outcome: string): PolicyDecision["action"] {
 }
 
 /**
+ * Redeem a one-time human approval ticket through the website approval
+ * bridge before executing a pre-authorized operation.
+ *
+ * The orchestrator already evaluated hard-denies plus Governor/local policy
+ * for this exact action; the bridge performs the atomic redemption of the
+ * human approval (status, tool, and parameter binding) inside the tool
+ * process so a ticket can never be replayed.
+ */
+async function redeemHumanApproval(
+  approvalId: string,
+  request: ToolRequest
+): Promise<PolicyDecision | null> {
+  const bridgeUrl = process.env.APPROVAL_API_URL;
+  const token = process.env.APPROVAL_API_TOKEN;
+  if (!bridgeUrl || !token) return null;
+
+  try {
+    const response = await fetch(`${bridgeUrl}/api/approvals/redeem`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Approval-Token": token,
+      },
+      body: JSON.stringify({
+        approvalId,
+        tool: request.tool,
+        params: request.params || {},
+      }),
+      signal: AbortSignal.timeout(3000),
+    });
+
+    const data = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      reason?: string;
+    };
+
+    if (response.ok && data.ok) {
+      log("info", "Human approval redeemed through bridge", {
+        approvalId,
+        tool: request.tool,
+      });
+      return {
+        action: "allow",
+        reason: `Human approval '${approvalId}' redeemed for '${request.tool}'.`,
+        approvalId,
+        rules: ["RULE_APPROVAL_REDEEMED"],
+      };
+    }
+
+    return {
+      action: "deny",
+      reason:
+        data.reason ||
+        `Human approval '${approvalId}' could not be redeemed (status ${response.status}).`,
+    };
+  } catch (err) {
+    // Bridge unreachable while an approval ticket is required — fail closed.
+    return {
+      action: "deny",
+      reason: `Approval verification unavailable (bridge unreachable): ${
+        err instanceof Error ? err.message : String(err)
+      }. Failing closed.`,
+    };
+  }
+}
+
+/**
  * Evaluate a tool request against the Governor's authorization pipeline.
- * 
+ *
  * Flow:
+ * 0. If a human approval ticket is present, redeem it through the bridge first
  * 1. Map the MCP tool to a Governor action type
  * 2. POST to /v1/actions with the agent's session token
  * 3. Interpret the response (ALLOW → execute, ESCALATE → pause, DENY → block)
  * 4. Return the decision with full audit context
- * 
+ *
  * On failure (network error, timeout), returns DENY (fail closed).
  */
 export async function evaluatePolicy(request: ToolRequest): Promise<PolicyDecision> {
+  const approvalId =
+    typeof request.params?.approval_id === "string" && request.params.approval_id
+      ? request.params.approval_id
+      : undefined;
+
+  if (approvalId) {
+    const redeemed = await redeemHumanApproval(approvalId, request);
+    if (redeemed) return redeemed;
+  }
+
   const governorAction = TOOL_TO_ACTION[request.tool] || "code.execute";
 
   // If no session token is configured, use local-only policy evaluation

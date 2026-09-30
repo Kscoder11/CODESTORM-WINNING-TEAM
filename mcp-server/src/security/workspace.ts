@@ -56,17 +56,25 @@ export class WorkspaceSecurityError extends Error {
  * 4. Reject secret/credential file patterns
  * 5. Reject hidden directories (except .gitignore etc.)
  * 
+ * @param root Optional workspace root to validate against (defaults to configured project root)
  * @returns The validated, resolved absolute path
  * @throws WorkspaceSecurityError on any violation
  */
-export function validateWorkspacePath(requestedPath: string, allowSecrets = false): string {
-  const projectRoot = config.projectRoot;
+export function validateWorkspacePath(
+  requestedPath: string,
+  allowSecrets = false,
+  root: string = config.projectRoot
+): string {
+  const projectRoot = root;
 
   // Normalize and resolve the requested path against the project root
   let targetPath: string;
   if (requestedPath.startsWith("/") || requestedPath.match(/^[A-Za-z]:\\/)) {
     // Absolute path provided — resolve as-is
     targetPath = resolve(requestedPath);
+  } else if (!requestedPath || requestedPath === ".") {
+    // Workspace root itself
+    targetPath = resolve(projectRoot);
   } else {
     // Relative path — resolve against project root
     targetPath = resolve(projectRoot, requestedPath);

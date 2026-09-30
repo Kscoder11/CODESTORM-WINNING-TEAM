@@ -10,9 +10,13 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { resolve } from "path";
+import { resolve, dirname } from "path";
 import { existsSync } from "fs";
+import { fileURLToPath } from "url";
 import { config, log } from "../config.js";
+
+/** Directory of the MCP server package itself (independent of workspace root). */
+const MCP_SERVER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 export interface MCPToolInfo {
   name: string;
@@ -45,29 +49,34 @@ export class PNG5MCPClient {
   private readonly options: Required<MCPClientOptions>;
 
   constructor(opts: MCPClientOptions = {}) {
-    const candidatePaths = [
-      resolve(config.projectRoot, "dist/server.js"),
-      resolve(config.projectRoot, "mcp-server/dist/server.js"),
-      resolve(process.cwd(), "dist/server.js"),
-      resolve(process.cwd(), "mcp-server/dist/server.js"),
+    const serverScriptCandidates = [
+      resolve(MCP_SERVER_DIR, "dist", "server.js"),
+      resolve(config.projectRoot, "mcp-server", "dist", "server.js"),
+      resolve(process.cwd(), "dist", "server.js"),
+      resolve(process.cwd(), "mcp-server", "dist", "server.js"),
     ];
-    const serverScript = candidatePaths.find((p) => existsSync(p));
-
-    const defaultCommand = process.execPath;
-    const defaultArgs = serverScript
-      ? [serverScript]
-      : [resolve(__dirname, "../../dist/server.js")];
-
-    const cwd = serverScript ? resolve(serverScript, "..", "..") : resolve(config.projectRoot, "mcp-server");
+    const serverScript = serverScriptCandidates.find((p) => existsSync(p));
 
     this.options = {
-      serverCommand: opts.serverCommand || defaultCommand,
-      serverArgs: opts.serverArgs || defaultArgs,
+      serverCommand: opts.serverCommand || process.execPath,
+      serverArgs: opts.serverArgs || (serverScript ? [serverScript] : [resolve(MCP_SERVER_DIR, "dist", "server.js")]),
       projectRoot: opts.projectRoot || config.projectRoot,
       governorUrl: opts.governorUrl || config.governorUrl,
       agentSessionToken: opts.agentSessionToken || config.agentSessionToken,
       timeoutMs: opts.timeoutMs || 15000,
     };
+  }
+
+  /**
+   * Point the client at a different registered workspace root.
+   * The MCP server child process is respawned on the next connect() with
+   * the new PROJECT_ROOT, so all tools validate against that workspace.
+   */
+  public async setWorkspaceRoot(root: string): Promise<void> {
+    if (this.options.projectRoot === root) return;
+    await this.disconnect();
+    this.options.projectRoot = root;
+    log("info", "MCP client workspace root changed", { root });
   }
 
   /**
@@ -91,31 +100,44 @@ export class PNG5MCPClient {
     log("info", "MCP Client connecting to server process...", {
       command: this.options.serverCommand,
       args: this.options.serverArgs,
+      workspaceRoot: this.options.projectRoot,
     });
 
     try {
       // Ensure any previous transport is cleaned up
       await this.disconnect();
 
-      const serverCwd = existsSync(resolve(this.options.projectRoot, "package.json"))
-        ? this.options.projectRoot
-        : resolve(this.options.projectRoot, "mcp-server");
+      const distCandidates = [
+        this.options.serverArgs?.[0],
+        resolve(MCP_SERVER_DIR, "dist", "server.js"),
+        resolve(this.options.projectRoot, "mcp-server", "dist", "server.js"),
+      ].filter((p): p is string => Boolean(p));
 
-      const distFile = existsSync(resolve(serverCwd, "dist/server.js"))
-        ? resolve(serverCwd, "dist/server.js")
-        : resolve(this.options.projectRoot, "mcp-server/dist/server.js");
+      const distFile = distCandidates.find((p) => existsSync(p));
+      if (!distFile) {
+        throw new Error(
+          `MCP server bundle not found (looked in: ${distCandidates.join(", ")}). Run 'npm run build' inside the mcp-server directory.`
+        );
+      }
+
+      // Environment handed to the MCP server child process.
+      // APPROVAL_API_* enables one-time human-approval redemption when the
+      // website bridge is running; both values are absent for standalone use.
+      const childEnv: Record<string, string> = {
+        ...(process.env as Record<string, string>),
+        PROJECT_ROOT: this.options.projectRoot,
+        GOVERNOR_URL: this.options.governorUrl,
+        AGENT_SESSION_TOKEN: this.options.agentSessionToken,
+        NODE_ENV: process.env.NODE_ENV || "production",
+      };
+      if (process.env.APPROVAL_API_URL) childEnv.APPROVAL_API_URL = process.env.APPROVAL_API_URL;
+      if (process.env.APPROVAL_API_TOKEN) childEnv.APPROVAL_API_TOKEN = process.env.APPROVAL_API_TOKEN;
 
       this.transport = new StdioClientTransport({
-        command: "node",
+        command: this.options.serverCommand || "node",
         args: [distFile],
-        cwd: serverCwd,
-        env: {
-          ...process.env,
-          PROJECT_ROOT: this.options.projectRoot,
-          GOVERNOR_URL: this.options.governorUrl,
-          AGENT_SESSION_TOKEN: this.options.agentSessionToken,
-          NODE_ENV: process.env.NODE_ENV || "production",
-        },
+        cwd: MCP_SERVER_DIR,
+        env: childEnv,
         stderr: "pipe",
       });
 

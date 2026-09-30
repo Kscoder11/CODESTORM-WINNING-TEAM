@@ -39,6 +39,8 @@ export interface RuntimePolicyVerdict {
   riskScore: number;
   approvalRequest?: HumanApprovalRequest;
   rules: string[];
+  /** Set when the verdict was granted through a verified human approval ticket. */
+  approvalId?: string;
 }
 
 /** Tool to Governor action category mapping */
@@ -112,7 +114,8 @@ export class RuntimePolicyEngine {
       }
 
       if (approval.status === "approved") {
-        // Verify parameter/tool binding
+        // Verify parameter/tool binding: the approval must match the exact
+        // operation being attempted (tool AND target resource).
         if (approval.tool !== action.tool) {
           return {
             allowed: false,
@@ -123,12 +126,29 @@ export class RuntimePolicyEngine {
           };
         }
 
-        // Consume approval token (one-time redemption)
-        this.approvalManager.consume(context.approvalId);
+        if (approval.target !== action.resource) {
+          return {
+            allowed: false,
+            verdict: "deny",
+            reason: `Approval token target mismatch (approved for '${approval.target}', got '${action.resource}')`,
+            riskScore: 1.0,
+            rules: ["RULE_APPROVAL_TAMPERED"],
+          };
+        }
+
+        // When the website approval bridge is running, redemption happens
+        // atomically inside the MCP tool process (one-time, after human
+        // approval) so we do not consume the ticket here. In standalone
+        // mode the ticket is consumed at this execution boundary.
+        const bridgeRunning = Boolean(process.env.APPROVAL_API_URL);
+        if (!bridgeRunning) {
+          this.approvalManager.consume(context.approvalId);
+        }
 
         log("info", "Runtime policy: Action allowed via verified human approval", {
           tool: action.tool,
           approvalId: context.approvalId,
+          deferredRedemption: bridgeRunning,
         });
 
         return {
@@ -136,6 +156,7 @@ export class RuntimePolicyEngine {
           verdict: "allow",
           reason: `Approved by reviewer (${approval.decidedBy || "human"})`,
           riskScore: approval.riskScore,
+          approvalId: context.approvalId,
           rules: ["RULE_APPROVAL_VERIFIED"],
         };
       }

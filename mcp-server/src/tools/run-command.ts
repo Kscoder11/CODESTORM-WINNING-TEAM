@@ -39,8 +39,12 @@ export function registerRunCommandTool(server: McpServer): void {
         .string()
         .default(".")
         .describe("Working directory relative to project root (default: project root)"),
+      approval_id: z
+        .string()
+        .optional()
+        .describe("Internal one-time execution ticket issued after human approval. Omit unless instructed by the system."),
     },
-    async ({ command, args, working_directory }) => {
+    async ({ command, args, working_directory, approval_id }) => {
       const resource = `exec:${command} ${args.join(" ")}`;
 
       // --- Policy evaluation (BEFORE any execution) ---
@@ -50,7 +54,7 @@ export function registerRunCommandTool(server: McpServer): void {
         projectId: config.projectId,
         tool: "run_project_command",
         resource,
-        params: { command, args },
+        params: { command, args, approval_id },
       });
 
       if (decision.action === "deny") {

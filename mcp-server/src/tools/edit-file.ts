@@ -30,8 +30,12 @@ export function registerEditFileTool(server: McpServer): void {
       path: z.string().describe("Relative or absolute path to the file within the project workspace"),
       content: z.string().describe("The complete new content for the file"),
       reason: z.string().describe("Explanation of why this edit is needed (shown to approver)"),
+      approval_id: z
+        .string()
+        .optional()
+        .describe("Internal one-time execution ticket issued after human approval. Omit unless instructed by the system."),
     },
-    async ({ path, content, reason }) => {
+    async ({ path, content, reason, approval_id }) => {
       const resource = `file:${config.projectRoot}/${path}`;
 
       // --- Policy evaluation (BEFORE any modification) ---
@@ -42,8 +46,10 @@ export function registerEditFileTool(server: McpServer): void {
         tool: "edit_project_file",
         resource,
         params: {
+          path,
           content_length: content.length,
           reason,
+          approval_id,
         },
       });
 
