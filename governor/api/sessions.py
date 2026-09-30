@@ -38,6 +38,7 @@ def create_session(
         expires_at=expires_at
     )
     db.add(session_rec)
+    db.flush()
     
     for g in payload.grants:
         grant_rec = GrantModel(
