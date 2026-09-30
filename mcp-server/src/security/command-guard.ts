@@ -64,7 +64,7 @@ export function validateCommand(
 ): CommandValidation {
   // --- Check 1: Command is on allowlist ---
   const baseCommand = command.trim().toLowerCase();
-  if (!config.commandAllowlist.includes(baseCommand)) {
+  if (!(config.commandAllowlist as readonly string[]).includes(baseCommand)) {
     log("warn", "Command not on allowlist", { command: baseCommand });
     throw new WorkspaceSecurityError(
       `Command '${baseCommand}' is not on the approved allowlist. Allowed: ${config.commandAllowlist.join(", ")}`,
