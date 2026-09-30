@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """
 PNG5 Core Governance Modules
 """

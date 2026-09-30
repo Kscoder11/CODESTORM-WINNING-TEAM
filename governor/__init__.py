@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """
 PNG5 Agent Permission Governor
 """
