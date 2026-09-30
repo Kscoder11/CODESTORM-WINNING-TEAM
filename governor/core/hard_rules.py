@@ -74,9 +74,10 @@ def evaluate_hard_denies(
                 raise HardDenyException("HD3", f"Destructive or illegal shell command detected matching pattern '{regex}'.")
         
         if argv and argv[0] == "rm":
+            ws_root = str(settings.WORKSPACE_DIR)
             for arg in argv[1:]:
-                if arg in ("/", "~", "*", ws_root) or arg.startswith("-r"):
-                    if any(a in ("/", "~", "*") for a in argv):
+                if arg in ("/", "~", "*", "/workspace", "/workspace/*", ws_root) or arg.startswith("-r"):
+                    if any(a in ("/", "~", "*", "/workspace", "/workspace/*", ws_root) for a in argv):
                         raise HardDenyException("HD3", "Destructive rm command targeting root/workspace is prohibited.")
 
     # --- HD4: Dangerous or Illegal SQL ---

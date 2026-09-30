@@ -58,12 +58,15 @@ def canonicalize_file_target(target: str, workspace_root: Path = settings.WORKSP
     if normalized.startswith("file:"):
         normalized = normalized[5:]
     
-    # Resolve absolute path
-    path_obj = Path(normalized)
-    if not path_obj.is_absolute():
-        path_obj = (workspace_root / path_obj).resolve()
+    # Handle virtual /workspace path from container/agent perspective
+    norm_clean = normalized.replace("\\", "/")
+    if norm_clean.startswith("/workspace"):
+        rel_candidate = norm_clean[len("/workspace"):].lstrip("/")
+        path_obj = (workspace_root / rel_candidate).resolve()
+    elif not Path(normalized).is_absolute():
+        path_obj = (workspace_root / normalized).resolve()
     else:
-        path_obj = path_obj.resolve()
+        path_obj = Path(normalized).resolve()
         
     resolved_str = str(path_obj)
     ws_root_str = str(workspace_root.resolve())
