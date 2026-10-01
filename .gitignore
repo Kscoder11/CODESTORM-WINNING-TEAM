@@ -9,3 +9,4 @@ __pycache__/
 mcp-server/node_modules/
 mcp-server/dist/
 mcp-server/__test_workspace__/
+node_modules
