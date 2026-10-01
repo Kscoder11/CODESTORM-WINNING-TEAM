@@ -161,7 +161,30 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
     initialDecision = "allow";
     reason = "Connectivity check permitted.";
   }
-  // B. Informational Questions & Explanations (e.g. "Explain this file", "What does this do", "Analyze architecture")
+  // B. File Creation (e.g. "Create a new file called report.txt", "create md file in docs with system_design.md name", "create smit.txt")
+  else if (
+    lowerPrompt.startsWith("create") ||
+    lowerPrompt.startsWith("make a new file") ||
+    lowerPrompt.startsWith("generate file") ||
+    lowerPrompt.includes("create file") ||
+    lowerPrompt.includes("create md") ||
+    lowerPrompt.includes("create txt") ||
+    lowerPrompt.includes("create doc") ||
+    lowerPrompt.includes("create a file") ||
+    lowerPrompt.includes("create new file") ||
+    lowerPrompt.includes("write file") ||
+    lowerPrompt.includes("make a file") ||
+    lowerPrompt.includes("touch ")
+  ) {
+    intent = "file_creation";
+    operation = "file.write";
+    candidateTools.push("create_project_file");
+    riskLevel = "MEDIUM";
+    riskScore = 0.4;
+    initialDecision = "allow";
+    reason = "Creating ordinary workspace files permitted under workspace policy.";
+  }
+  // C. Informational Questions & Explanations (e.g. "Explain this file", "What does this do", "Explain how the architecture works")
   else if (
     lowerPrompt.startsWith("explain") ||
     lowerPrompt.startsWith("what is") ||
@@ -181,7 +204,7 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
     initialDecision = "allow";
     reason = "Informational codebase explanation permitted without approval.";
   }
-  // C. Code Search & Grep (e.g. "Find all files related to auth", "Search for policy")
+  // D. Code Search & Grep (e.g. "Find all files related to auth", "Search for policy")
   else if (
     lowerPrompt.includes("search") ||
     lowerPrompt.includes("find all") ||
@@ -197,7 +220,7 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
     initialDecision = "allow";
     reason = "Read-only codebase search permitted.";
   }
-  // D. Directory / File Listing (e.g. "List the project folders", "Show files in src")
+  // E. Directory / File Listing (e.g. "List the project folders", "Show files in src")
   else if (
     lowerPrompt.includes("list") ||
     lowerPrompt.includes("show file") ||
@@ -214,7 +237,7 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
     initialDecision = "allow";
     reason = "Read-only directory listing permitted.";
   }
-  // E. Destructive Deletion (e.g. "Delete the old authentication module", "Remove file")
+  // F. Destructive Deletion (e.g. "Delete the old authentication module", "Remove file")
   else if (
     lowerPrompt.includes("delete file") ||
     lowerPrompt.includes("delete the") ||
@@ -229,7 +252,7 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
     initialDecision = "require_approval";
     reason = "Destructive file deletion requires explicit human authorization.";
   }
-  // F. Dependency / Package Installation (e.g. "Install package lodash", "npm install")
+  // G. Dependency / Package Installation (e.g. "Install package lodash", "npm install")
   else if (
     lowerPrompt.includes("install package") ||
     lowerPrompt.includes("install dependency") ||
@@ -245,7 +268,7 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
     initialDecision = "require_approval";
     reason = "External package installation requires operator authorization.";
   }
-  // G. Sensitive Security/Auth/Middleware Modification
+  // H. Sensitive Security/Auth/Middleware Modification
   else if (
     (lowerPrompt.includes("auth") || lowerPrompt.includes("security") || lowerPrompt.includes("governor") || lowerPrompt.includes("middleware") || lowerPrompt.includes("secret")) &&
     (lowerPrompt.includes("edit") || lowerPrompt.includes("change") || lowerPrompt.includes("modify") || lowerPrompt.includes("disable") || lowerPrompt.includes("bypass"))
@@ -258,7 +281,7 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
     initialDecision = "require_approval";
     reason = "Modifying authentication or security controls requires explicit approval.";
   }
-  // H. Routine Reversible UI & Source Code Editing (e.g. "Change button color to blue", "Make login responsive")
+  // I. Routine Reversible UI & Source Code Editing (e.g. "Change button color to blue", "Make login responsive")
   else if (
     lowerPrompt.includes("change") ||
     lowerPrompt.includes("edit") ||
@@ -278,20 +301,6 @@ export function identifyPrompt(rawPrompt: string, userId: string = "web-user"): 
     riskScore = 0.35;
     initialDecision = "allow"; // Permitted under Workspace Editing Policy!
     reason = "Routine workspace code editing permitted under workspace editing policy with diff tracking.";
-  }
-  // I. File Creation (e.g. "Create a new file called report.txt")
-  else if (
-    lowerPrompt.includes("create file") ||
-    lowerPrompt.includes("make a new file") ||
-    lowerPrompt.includes("write file")
-  ) {
-    intent = "file_creation";
-    operation = "file.write";
-    candidateTools.push("create_project_file");
-    riskLevel = "MEDIUM";
-    riskScore = 0.4;
-    initialDecision = "allow";
-    reason = "Creating ordinary workspace files permitted under workspace policy.";
   }
   // J. Routine Testing Commands (e.g. "Run tests", "npm test", "pytest")
   else if (

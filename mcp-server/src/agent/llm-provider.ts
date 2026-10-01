@@ -134,7 +134,7 @@ export class LLMProvider {
 
     // 0. Informational Codebase & Architecture Explanations (e.g. "Explain how the architecture works", "Explain this code")
     if (
-      lower.startsWith("explain") ||
+      (lower.startsWith("explain") ||
       lower.includes("how does") ||
       lower.includes("how it works") ||
       lower.includes("architecture") ||
@@ -142,7 +142,16 @@ export class LLMProvider {
       lower.includes("what does") ||
       lower.includes("overview") ||
       lower.includes("summarize codebase") ||
-      lower.includes("tell me about")
+      lower.includes("tell me about")) &&
+      !lower.startsWith("create") &&
+      !lower.startsWith("make") &&
+      !lower.startsWith("write") &&
+      !lower.startsWith("generate") &&
+      !lower.startsWith("touch") &&
+      !lower.includes("create file") &&
+      !lower.includes("create md") &&
+      !lower.includes("create txt") &&
+      !lower.includes("create .")
     ) {
       const architectureSummary = `### 🏛️ PNG5 Governed AI Local IDE Architecture
 
@@ -302,12 +311,24 @@ The system is built on an enterprise **multi-tier zero-trust development archite
     ) {
       let targetFile = explicitFile;
       if (!targetFile) {
-        targetFile = targetDir ? `${targetDir}/new_file.txt` : "summary.txt";
+        if (lower.includes(".md") || lower.includes("system design") || lower.includes("architecture")) {
+          targetFile = targetDir ? `${targetDir}/system_design.md` : "system_design.md";
+        } else {
+          targetFile = targetDir ? `${targetDir}/new_file.txt` : "summary.txt";
+        }
       }
-      const finalContent = customContent ? (customContent + "\n") : "Generated content from PNG5 AI Coding Assistant.\n";
+
+      let finalContent = "";
+      if (lower.includes("system design") || lower.includes("architecture") || lower.includes("specification")) {
+        finalContent = `# PNG5 NOMOS — System Design & Architecture Specification\n\n## 1. Executive Summary\nPNG5 NOMOS is an enterprise-grade AI Permission Governor and Autonomous Development IDE that bridges AI agent autonomy with mathematical Zero-Trust security guarantees and cryptographic auditability.\n\n## 2. Multi-Tier Architecture Overview\n- **Tier 1: Frontend Workspace & Monaco IDE**\n  - Monaco code editor with syntax highlighting, multi-tab editing, split diffing.\n  - Live preview engine with hot-reload and multi-device viewports.\n  - Activity bar and recursive file tree explorer.\n- **Tier 2: Intelligent Risk-Based Middleware & Prompt Classifier**\n  - Analyzes prompt intent, extracts target resources, calculates risk scores (0.0 to 1.0).\n  - Hard Denial Invariants (HD1–HD10) enforce non-overrideable safety rules.\n- **Tier 3: Policy Governor Daemon**\n  - Evaluates mathematical invariants across action types, scopes, and taint provenance.\n  - Issues 5-minute cryptographic human approval tickets for sensitive actions.\n- **Tier 4: Model Context Protocol (MCP) Execution Gateway**\n  - Controlled execution layer hosting verified tools (\`read_project_file\`, \`edit_project_file\`, \`create_project_file\`, \`run_project_command\`).\n- **Tier 5: Cryptographic SHA-256 Audit Ledger**\n  - Immutable hash chain binding every prompt, tool execution, decision, and operator authorization.\n\n## 3. Data Flow & Security Boundaries\n1. User prompt is submitted to \`/api/chat\`.\n2. Middleware classifies intent and evaluates risk score.\n3. If risk <= 30%: Auto-allowed with live diff tracking.\n4. If risk > 70% or sensitive resource: Escalated to Human Operator Approval (HITL).\n5. If attack vector detected: Permanently denied with Hard Denial Invariant.\n6. Execution results are broadcasted via SSE \`/api/stream\` and written to the cryptographic ledger.\n`;
+      } else if (customContent) {
+        finalContent = customContent + "\n";
+      } else {
+        finalContent = "Generated content from PNG5 AI Coding Assistant.\n";
+      }
 
       return {
-        thought: `User requested creating new file '${targetFile}' with content: "${finalContent.trim()}".`,
+        thought: `User requested creating new file '${targetFile}' with ${finalContent.length} bytes of content.`,
         tool: "create_project_file",
         arguments: {
           path: targetFile,
