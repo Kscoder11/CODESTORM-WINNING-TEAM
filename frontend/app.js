@@ -5,71 +5,114 @@
  * - Monaco Editor with multi-tab workspace, syntax highlighting, and live diff mode
  * - File tree explorer with live directory creation, deletion, and file selection
  * - Codebase pattern search across active project workspace
- * - Git version control status, diff inspection, staging, and rollback
+ * - Git version control status, diff inspection, and staging
  * - Conversational AI Assistant with prompt categorization, tool step visualization, and active context
- * - Zero-Trust Governor Human Approval Modal & sidebar with 5-minute tickets
- * - Live Preview with hot reload, device viewports (desktop/tablet/mobile), and DOM inspector
+ * - Zero-Trust Governor Human Approval Modal & sidebar
+ * - Live Preview with hot reload and device viewports (desktop/tablet/mobile)
  * - Controlled interactive terminal execution console
- * - Cryptographic SHA-256 audit ledger and blockchain-style verification
+ * - Cryptographic SHA-256 audit ledger and verification
  * - Real-time Server-Sent Events (SSE) telemetry stream
  */
 
-// Global State
+// Global Application State
 let monacoEditor = null;
 let monacoDiffEditor = null;
 let currentProject = { name: "workspace", path: "", framework: "Static" };
-let openFiles = new Map(); // path -> { content, original, language, dirty }
+let openFiles = new Map(); // path -> { name, path, content, original, language, dirty }
 let activeFilePath = null;
 let activeEditorMode = "editor"; // "editor" | "diff"
 let activeActivityTab = "explorer";
 let activeBottomTab = "terminal";
+let activeRightTab = "preview";
 let activeApprovalId = null;
 let activePromptForApproval = null;
-let inspectedElement = null;
-let isInspectorActive = false;
 let terminalHistory = [];
 let terminalHistoryIndex = -1;
 
 // ============================================================
-// Initialization & Monaco Loader
+// Initialization Lifecycle
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-  initializeMonaco();
-  await loadActiveProject();
-  await refreshProjectTree();
-  await refreshGitStatus();
-  await fetchPendingApprovals();
-  await fetchAuditLogs();
-  initSSEStream();
+  try {
+    initializeMonaco();
+  } catch (err) {
+    console.warn("Monaco init deferred", err);
+  }
 
-  // Keyboard Shortcuts
+  try {
+    await loadActiveProject();
+  } catch (err) {
+    console.error("loadActiveProject error", err);
+  }
+
+  try {
+    await refreshProjectTree();
+  } catch (err) {
+    console.error("refreshProjectTree error", err);
+  }
+
+  try {
+    await refreshGitStatus();
+  } catch (err) {
+    console.error("refreshGitStatus error", err);
+  }
+
+  try {
+    await fetchPendingApprovals();
+  } catch (err) {
+    console.error("fetchPendingApprovals error", err);
+  }
+
+  try {
+    await fetchAuditLogs();
+  } catch (err) {
+    console.error("fetchAuditLogs error", err);
+  }
+
+  try {
+    await loadSecurityScenarios();
+  } catch (err) {
+    console.error("loadSecurityScenarios error", err);
+  }
+
+  try {
+    initSSEStream();
+  } catch (err) {
+    console.warn("SSE init deferred", err);
+  }
+
+  // Keyboard Shortcuts & Global Listeners
   window.addEventListener("keydown", handleGlobalShortcuts);
 
-  // Element Inspector PostMessage Listener
-  window.addEventListener("message", handleInspectorMessage);
-
-  // Periodic Polling Fallback
+  // Periodic Polling Fallbacks
   setInterval(fetchPendingApprovals, 5000);
   setInterval(refreshGitStatus, 10000);
 });
 
+// ============================================================
+// 1. Monaco Editor Initialization & Tab Management
+// ============================================================
+
 function initializeMonaco() {
-  if (typeof require === "undefined") {
-    console.warn("Monaco loader not found, falling back to basic textarea");
+  const editorContainer = document.getElementById("monaco-editor-container");
+  if (!editorContainer) return;
+
+  if (typeof require === "undefined" || !window.require) {
+    console.warn("Monaco CDN loader not ready, creating fallback editor textarea");
+    createFallbackTextarea(editorContainer);
     return;
   }
 
-  require.config({
-    paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs" },
-  });
+  try {
+    require.config({
+      paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs" },
+    });
 
-  require(["vs/editor/editor.main"], () => {
-    // Standard Code Editor
-    const editorContainer = document.getElementById("monaco-editor-container");
-    if (editorContainer) {
+    require(["vs/editor/editor.main"], () => {
+      // Main Code Editor
       monacoEditor = monaco.editor.create(editorContainer, {
-        value: "/* Welcome to PNG5 Governed AI Local IDE */\n// Select a file from the explorer on the left or ask the AI assistant.",
+        value: "/* Welcome to PNG5 Governed AI Local IDE */\n// Select a file from the explorer on the left or instruct the AI assistant.",
         language: "javascript",
         theme: "vs-dark",
         automaticLayout: true,
@@ -90,37 +133,69 @@ function initializeMonaco() {
           renderEditorTabs();
         }
       });
-    }
 
-    // Diff Editor
-    const diffContainer = document.getElementById("monaco-diff-container");
-    if (diffContainer) {
-      monacoDiffEditor = monaco.editor.createDiffEditor(diffContainer, {
-        theme: "vs-dark",
-        automaticLayout: true,
-        fontSize: 13,
-        fontFamily: "'JetBrains Mono', Consolas, 'Courier New', monospace",
-        readOnly: true,
+      // Diff Editor
+      const diffContainer = document.getElementById("monaco-diff-container");
+      if (diffContainer) {
+        monacoDiffEditor = monaco.editor.createDiffEditor(diffContainer, {
+          theme: "vs-dark",
+          automaticLayout: true,
+          fontSize: 13,
+          fontFamily: "'JetBrains Mono', Consolas, 'Courier New', monospace",
+          readOnly: true,
+        });
+      }
+
+      // Automatically open default startup files
+      openFileByPath("style.css").catch(() => {
+        openFileByPath("index.html").catch(() => {});
       });
-    }
-
-    // Open default starter file if available
-    openFileByPath("style.css").catch(() => {
-      openFileByPath("index.html").catch(() => {});
     });
+  } catch (err) {
+    console.warn("Monaco setup error", err);
+    createFallbackTextarea(editorContainer);
+  }
+}
+
+function createFallbackTextarea(container) {
+  if (container.querySelector("textarea")) return;
+  container.innerHTML = "";
+  const ta = document.createElement("textarea");
+  ta.id = "fallback-code-editor";
+  ta.className = "fallback-code-area";
+  ta.placeholder = "/* Code Editor */";
+  ta.style.width = "100%";
+  ta.style.height = "100%";
+  ta.style.background = "#0b0c12";
+  ta.style.color = "#00ff88";
+  ta.style.fontFamily = "'JetBrains Mono', monospace";
+  ta.style.fontSize = "13px";
+  ta.style.padding = "16px";
+  ta.style.border = "none";
+  ta.style.outline = "none";
+  ta.style.resize = "none";
+
+  ta.addEventListener("input", () => {
+    if (activeFilePath && openFiles.has(activeFilePath)) {
+      const fileData = openFiles.get(activeFilePath);
+      fileData.content = ta.value;
+      fileData.dirty = ta.value !== fileData.original;
+      renderEditorTabs();
+    }
   });
+
+  container.appendChild(ta);
 }
 
 // ============================================================
-// Real-time SSE Telemetry Stream
+// 2. Real-time Server-Sent Events (SSE) Stream
 // ============================================================
 
 function initSSEStream() {
   try {
     const eventSource = new EventSource("/api/stream");
 
-    eventSource.addEventListener("action_event", (e) => {
-      const data = JSON.parse(e.data);
+    eventSource.addEventListener("action_event", () => {
       fetchAuditLogs();
       fetchPendingApprovals();
     });
@@ -131,12 +206,9 @@ function initSSEStream() {
     });
 
     eventSource.addEventListener("file_saved", (e) => {
-      const data = JSON.parse(e.data);
-      reloadLivePreview();
+      const data = JSON.parse(e.data || "{}");
+      refreshLivePreview();
       refreshGitStatus();
-      if (data.path === activeFilePath && openFiles.has(data.path)) {
-        // Refresh local cache if modified externally
-      }
     });
 
     eventSource.addEventListener("tree_updated", () => {
@@ -144,11 +216,10 @@ function initSSEStream() {
       refreshGitStatus();
     });
 
-    eventSource.addEventListener("project_changed", (e) => {
-      const data = JSON.parse(e.data);
+    eventSource.addEventListener("project_changed", () => {
       loadActiveProject();
       refreshProjectTree();
-      reloadLivePreview();
+      refreshLivePreview();
     });
   } catch (err) {
     console.warn("SSE connection deferred", err);
@@ -156,7 +227,7 @@ function initSSEStream() {
 }
 
 // ============================================================
-// Project Workspace & File Explorer
+// 3. Project Workspace & File Explorer
 // ============================================================
 
 async function loadActiveProject() {
@@ -226,7 +297,7 @@ function renderTreeNodeList(nodes) {
         childrenWrapper.appendChild(renderTreeNodeList(node.children));
       }
 
-      // Auto-expand top level or important folders
+      // Auto-expand prominent folders
       if (node.name === "demo" || node.name === "workspace" || node.name === "src" || node.name === "frontend") {
         header.classList.add("expanded");
         childrenWrapper.classList.remove("hidden");
@@ -276,7 +347,7 @@ function renderTreeNodeList(nodes) {
 }
 
 // ============================================================
-// File Management & Monaco Tab System
+// 4. File Management & Multi-Tab System
 // ============================================================
 
 async function openFileByPath(relPath) {
@@ -301,7 +372,7 @@ async function openFileByPath(relPath) {
     activeFilePath = relPath;
     const fileData = openFiles.get(relPath);
 
-    // Update Monaco Model
+    // Update Monaco Editor Model
     if (monacoEditor && window.monaco) {
       let model = monaco.editor.getModels().find((m) => m.uri.path === `/${relPath}`);
       if (!model) {
@@ -319,13 +390,16 @@ async function openFileByPath(relPath) {
         const originalModel = monaco.editor.createModel(fileData.original, fileData.language);
         monacoDiffEditor.setModel({ original: originalModel, modified: model });
       }
+    } else {
+      const fallbackTa = document.getElementById("fallback-code-editor");
+      if (fallbackTa) fallbackTa.value = fileData.content;
     }
 
     // Update UI elements
     renderEditorTabs();
     highlightActiveFileInTree();
 
-    // Status bar info
+    // Status bar path
     const pathStatusEl = document.getElementById("active-file-path-status");
     if (pathStatusEl) pathStatusEl.textContent = `📄 ${relPath}`;
 
@@ -354,7 +428,7 @@ function detectLanguage(filepath) {
 }
 
 function renderEditorTabs() {
-  const container = document.getElementById("tabs-scroll-container") || document.getElementById("editor-tabs-container");
+  const container = document.getElementById("tabs-scroll-container") || document.getElementById("editor-tabs-bar");
   if (!container) return;
 
   container.innerHTML = "";
@@ -384,6 +458,10 @@ function closeEditorTab(event, path) {
       if (monacoEditor) {
         monacoEditor.setValue("/* No file open */");
       }
+      const fallbackTa = document.getElementById("fallback-code-editor");
+      if (fallbackTa) fallbackTa.value = "/* No file open */";
+      const pathStatusEl = document.getElementById("active-file-path-status");
+      if (pathStatusEl) pathStatusEl.textContent = "Ready";
     }
   }
   renderEditorTabs();
@@ -400,8 +478,73 @@ function highlightActiveFileInTree() {
   });
 }
 
+async function saveActiveFile() {
+  if (!activeFilePath || !openFiles.has(activeFilePath)) return;
+
+  const fileData = openFiles.get(activeFilePath);
+  let currentContent = fileData.content;
+  if (monacoEditor) {
+    currentContent = monacoEditor.getValue();
+  } else {
+    const ta = document.getElementById("fallback-code-editor");
+    if (ta) currentContent = ta.value;
+  }
+
+  try {
+    const res = await fetch("/api/project/file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: activeFilePath,
+        content: currentContent,
+      }),
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    fileData.original = currentContent;
+    fileData.content = currentContent;
+    fileData.dirty = false;
+    renderEditorTabs();
+
+    appendTerminalOutput(`[Saved] ${activeFilePath} successfully.`, "stdout");
+    refreshLivePreview();
+    refreshGitStatus();
+  } catch (err) {
+    alert(`Failed to save file: ${err.message}`);
+  }
+}
+
+function toggleDiffMode() {
+  const nextMode = activeEditorMode === "diff" ? "editor" : "diff";
+  activeEditorMode = nextMode;
+  
+  const editorEl = document.getElementById("monaco-editor-container");
+  const diffEl = document.getElementById("monaco-diff-container");
+  const btn = document.getElementById("btn-toggle-diff");
+
+  if (nextMode === "diff") {
+    editorEl?.classList.add("hidden");
+    diffEl?.classList.remove("hidden");
+    btn?.classList.add("active");
+  } else {
+    editorEl?.classList.remove("hidden");
+    diffEl?.classList.add("hidden");
+    btn?.classList.remove("active");
+  }
+}
+
+function toggleSplitPreview() {
+  const rightPanel = document.getElementById("right-assistant-preview");
+  const btn = document.getElementById("btn-toggle-split-preview");
+  if (rightPanel) {
+    const isHidden = rightPanel.classList.toggle("hidden");
+    btn?.classList.toggle("active", !isHidden);
+  }
+}
+
 // ============================================================
-// Workspace Switcher Modal & Operations
+// 5. Workspace Switcher Modal
 // ============================================================
 
 function openProjectModal() {
@@ -446,7 +589,7 @@ function renderRecentProjectsList(projects) {
         <div class="row-left">
           <svg class="svg-inline svg-accent-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
           <span class="project-basename font-bold">${escapeHtml(baseName)}</span>
-          ${isCurrent ? '<span class="pill-success" style="font-size: 0.65rem; padding: 1px 4px;">ACTIVE</span>' : ''}
+          ${isCurrent ? '<span class="status-pill pill-success" style="font-size: 0.65rem; padding: 1px 4px;">ACTIVE</span>' : ''}
         </div>
         <div class="project-fullpath">${escapeHtml(p)}</div>
       </div>
@@ -464,10 +607,12 @@ async function switchProjectWorkspace(path) {
     });
     if (!res.ok) throw new Error("Failed to switch workspace");
     closeProjectModal();
+    openFiles.clear();
     await loadActiveProject();
     await refreshProjectTree();
+    refreshLivePreview();
     
-    // Open default file in new workspace
+    // Open starter file in new workspace
     openFileByPath("style.css").catch(() => {
       openFileByPath("index.html").catch(() => {});
     });
@@ -502,7 +647,6 @@ async function promptNewFolder() {
   if (!foldername || !foldername.trim()) return;
 
   try {
-    // Create placeholder inside folder to register directory
     await fetch("/api/project/file/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -513,128 +657,20 @@ async function promptNewFolder() {
     alert("Create folder failed: " + err.message);
   }
 }
-  if (event) event.stopPropagation();
-  openFiles.delete(path);
-
-  if (activeFilePath === path) {
-    const remaining = Array.from(openFiles.keys());
-    if (remaining.length > 0) {
-      openFileByPath(remaining[remaining.length - 1]);
-    } else {
-      activeFilePath = null;
-      if (monacoEditor) {
-        monacoEditor.setValue("/* No file open */");
-      }
-      updateActiveFileBreadcrumbs();
-    }
-  }
-  renderEditorTabs();
-}
-
-async function saveActiveFile() {
-  if (!activeFilePath || !openFiles.has(activeFilePath)) return;
-
-  const fileData = openFiles.get(activeFilePath);
-  const currentContent = monacoEditor ? monacoEditor.getValue() : fileData.content;
-
-  try {
-    const res = await fetch("/api/project/file", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        path: activeFilePath,
-        content: currentContent,
-      }),
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    fileData.original = currentContent;
-    fileData.content = currentContent;
-    fileData.dirty = false;
-    renderEditorTabs();
-
-    appendTerminalOutput(`[Saved] ${activeFilePath} successfully.`, "stdout");
-    reloadLivePreview();
-    refreshGitStatus();
-  } catch (err) {
-    alert(`Failed to save file: ${err.message}`);
-  }
-}
-
-function updateActiveFileBreadcrumbs() {
-  const bc = document.getElementById("editor-breadcrumb-text");
-  if (bc) {
-    bc.textContent = activeFilePath || "No file open";
-  }
-}
-
-function highlightActiveFileInTree() {
-  document.querySelectorAll(".tree-node.file").forEach((el) => {
-    if (el.dataset.path === activeFilePath) {
-      el.classList.add("active");
-    } else {
-      el.classList.remove("active");
-    }
-  });
-}
-
-function setEditorViewMode(mode) {
-  activeEditorMode = mode;
-  const editorEl = document.getElementById("monaco-editor-container");
-  const diffEl = document.getElementById("monaco-diff-container");
-  const btnEditor = document.getElementById("btn-mode-editor");
-  const btnDiff = document.getElementById("btn-mode-diff");
-
-  if (mode === "diff") {
-    editorEl?.classList.add("hidden");
-    diffEl?.classList.remove("hidden");
-    btnEditor?.classList.remove("active");
-    btnDiff?.classList.add("active");
-  } else {
-    editorEl?.classList.remove("hidden");
-    diffEl?.classList.add("hidden");
-    btnEditor?.classList.add("active");
-    btnDiff?.classList.remove("active");
-  }
-}
 
 // ============================================================
-// Activity Bar & Sidebar Navigation
+// 6. Activity Bar & Navigation
 // ============================================================
 
 function switchActivityTab(tabName) {
   activeActivityTab = tabName;
 
-  // Update Activity bar icons
   document.querySelectorAll(".activity-icon-btn").forEach((btn) => {
     btn.classList.remove("active");
   });
   const activeBtn = document.getElementById(`act-btn-${tabName}`);
   if (activeBtn) activeBtn.classList.add("active");
 
-  // If switched to preview tab
-  if (tabName === "preview") {
-    switchRightTab("preview");
-    // Ensure the explorer sidebar stays open and visible
-    document.querySelectorAll(".sidebar-view-panel").forEach((panel) => {
-      panel.classList.remove("active");
-    });
-    document.getElementById("sidebar-explorer")?.classList.add("active");
-    return;
-  }
-
-  // If switched to assistant tab
-  if (tabName === "assistant") {
-    switchRightTab("assistant");
-    document.querySelectorAll(".sidebar-view-panel").forEach((panel) => {
-      panel.classList.remove("active");
-    });
-    document.getElementById("sidebar-explorer")?.classList.add("active");
-    return;
-  }
-
-  // Update Sidebar Panels
   document.querySelectorAll(".sidebar-view-panel").forEach((panel) => {
     panel.classList.remove("active");
   });
@@ -643,51 +679,12 @@ function switchActivityTab(tabName) {
 
   if (tabName === "git") refreshGitStatus();
   if (tabName === "security") fetchPendingApprovals();
-}
-
-function switchRightTab(tabName) {
-  document.querySelectorAll(".right-tab-btn").forEach((btn) => btn.classList.remove("active"));
-  document.querySelectorAll(".right-subpanel").forEach((panel) => panel.classList.remove("active"));
-
-  const btn = document.getElementById(`tab-btn-${tabName}`);
-  const panel = document.getElementById(`right-panel-${tabName}`);
-  if (btn) btn.classList.add("active");
-  if (panel) panel.classList.add("active");
-
-  // Highlight preview button in toolbar if preview active
-  const btnTogglePrev = document.getElementById("btn-toggle-preview");
-  if (btnTogglePrev) {
-    btnTogglePrev.classList.toggle("active", tabName === "preview");
-  }
-
-  if (tabName === "preview") {
-    reloadLivePreview();
-  }
-}
-
-function switchBottomTab(tabName) {
-  activeBottomTab = tabName;
-  document.querySelectorAll(".panel-tab-btn").forEach((btn) => btn.classList.remove("active"));
-  document.querySelectorAll(".bottom-subpanel").forEach((panel) => panel.classList.remove("active"));
-
-  const btns = document.querySelectorAll(".panel-tab-btn");
-  if (tabName === "terminal" && btns[0]) btns[0].classList.add("active");
-  if (tabName === "diagnostics" && btns[1]) btns[1].classList.add("active");
-  if (tabName === "audit" && btns[2]) btns[2].classList.add("active");
-
-  const panel = document.getElementById(`bottom-${tabName}`);
-  if (panel) panel.classList.add("active");
-
-  if (tabName === "audit") fetchAuditLogs();
-}
-
-function toggleBottomPanel() {
-  const panel = document.getElementById("bottom-panel");
-  panel?.classList.toggle("collapsed");
+  if (tabName === "preview") switchRightTab("preview");
+  if (tabName === "assistant") switchRightTab("assistant");
 }
 
 // ============================================================
-// Codebase Search Engine
+// 7. Codebase Search Engine
 // ============================================================
 
 function handleSearchKeyDown(event) {
@@ -704,484 +701,197 @@ async function execCodebaseSearch() {
   const query = input.value.trim();
   if (!query) return;
 
-  container.innerHTML = `<div class="sidebar-loading">Searching codebase for "${escapeHtml(query)}"...</div>`;
+  container.innerHTML = `<div class="sidebar-empty">Searching codebase for "${escapeHtml(query)}"...</div>`;
 
   try {
     const res = await fetch(`/api/project/search?q=${encodeURIComponent(query)}`);
+    if (!res.ok) throw new Error(`Search error: ${res.status}`);
     const data = await res.json();
+    const results = data.results || [];
 
-    if (!data.results || data.results.length === 0) {
-      container.innerHTML = `<div class="sidebar-empty">No matches found for "${escapeHtml(query)}"</div>`;
+    if (results.length === 0) {
+      container.innerHTML = `<div class="sidebar-empty">No matching pattern found.</div>`;
       return;
     }
 
-    let html = `<div class="search-summary">${data.total} results found:</div><div class="search-items-list">`;
-    for (const r of data.results) {
-      html += `
+    container.innerHTML = `
+      <div class="search-summary">Found ${results.length} matches:</div>
+      ${results.map((r) => `
         <div class="search-result-item" onclick="openFileByPath('${escapeHtml(r.file)}')">
-          <div class="search-res-file">📄 ${escapeHtml(r.file)} <span class="search-line-tag">:${r.line}</span></div>
-          <div class="search-res-snippet"><code>${escapeHtml(r.text)}</code></div>
+          <div class="search-res-file">${escapeHtml(r.file)} <span class="search-line-tag">:${r.line}</span></div>
+          <div class="search-res-snippet">${escapeHtml(r.text)}</div>
         </div>
-      `;
-    }
-    html += `</div>`;
-    container.innerHTML = html;
+      `).join("")}
+    `;
   } catch (err) {
-    container.innerHTML = `<div class="sidebar-empty" style="color: #ef4444;">Search failed: ${escapeHtml(err.message)}</div>`;
+    container.innerHTML = `<div class="sidebar-empty" style="color: #ff3366;">${escapeHtml(err.message)}</div>`;
   }
 }
 
 // ============================================================
-// Git & Source Control
+// 8. Git & Version Control
 // ============================================================
 
 async function refreshGitStatus() {
   try {
     const res = await fetch("/api/git/status");
+    if (!res.ok) return;
     const data = await res.json();
 
-    const branchTag = document.getElementById("git-branch-tag");
-    const sbBranch = document.getElementById("sb-git-branch");
-    const gitBadge = document.getElementById("git-badge");
-    const container = document.getElementById("git-changes-list");
+    const branchEl = document.getElementById("git-branch-name");
+    const statusBranchEl = document.getElementById("git-status-branch");
+    const badgeEl = document.getElementById("git-badge");
+    const container = document.getElementById("git-changed-files");
 
-    if (branchTag) branchTag.textContent = `🌿 ${data.branch || "main"}`;
-    if (sbBranch) sbBranch.textContent = `🌿 ${data.branch || "main"}`;
+    const branch = data.branch || "main";
+    if (branchEl) branchEl.textContent = branch;
+    if (statusBranchEl) statusBranchEl.innerHTML = `<svg class="svg-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg> ${escapeHtml(branch)}`;
 
-    const total = (data.modified?.length || 0) + (data.untracked?.length || 0);
-    if (gitBadge) {
-      if (total > 0) {
-        gitBadge.textContent = total;
-        gitBadge.classList.remove("hidden");
+    const files = data.files || [];
+    if (badgeEl) {
+      if (files.length > 0) {
+        badgeEl.textContent = files.length;
+        badgeEl.classList.remove("hidden");
       } else {
-        gitBadge.classList.add("hidden");
+        badgeEl.classList.add("hidden");
       }
     }
 
     if (!container) return;
 
-    if (total === 0) {
-      container.innerHTML = `<div class="sidebar-empty">No uncommitted changes. Working tree clean.</div>`;
+    if (files.length === 0) {
+      container.innerHTML = `<div class="sidebar-empty">No modified files. Working tree clean.</div>`;
       return;
     }
 
-    let html = `<div class="git-header-row"><span>MODIFIED FILES (${total})</span></div>`;
-
-    for (const m of data.modified || []) {
-      html += `
-        <div class="git-file-row">
-          <span class="git-status-m">M</span>
-          <span class="git-filename" onclick="openFileByPath('${escapeHtml(m)}'); setEditorViewMode('diff');">${escapeHtml(m)}</span>
-          <button class="btn-git-action" title="Discard Changes" onclick="discardGitFile('${escapeHtml(m)}')">↩</button>
-        </div>
-      `;
-    }
-
-    for (const u of data.untracked || []) {
-      html += `
-        <div class="git-file-row">
-          <span class="git-status-u">U</span>
-          <span class="git-filename" onclick="openFileByPath('${escapeHtml(u)}')">${escapeHtml(u)}</span>
-        </div>
-      `;
-    }
-
-    container.innerHTML = html;
-  } catch {
-    // Ignore error
-  }
-}
-
-async function discardGitFile(path) {
-  if (!confirm(`Discard changes in ${path}? This cannot be undone.`)) return;
-  try {
-    await fetch("/api/git/discard", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path }),
-    });
-    refreshGitStatus();
-    openFiles.delete(path);
-    openFileByPath(path);
+    container.innerHTML = files.map((f) => `
+      <div class="git-file-row" onclick="openFileByPath('${escapeHtml(f.path)}')">
+        <span class="git-status-${(f.status || "M").toLowerCase()}">${escapeHtml(f.status || "M")}</span>
+        <span class="git-filename" title="${escapeHtml(f.path)}">${escapeHtml(f.path)}</span>
+      </div>
+    `).join("");
   } catch (err) {
-    alert("Discard failed: " + err.message);
-  }
-}
-
-async function discardAllChanges() {
-  if (!confirm("Discard all uncommitted changes in workspace?")) return;
-  try {
-    const res = await fetch("/api/git/status");
-    const data = await res.json();
-    for (const file of data.modified || []) {
-      await fetch("/api/git/discard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: file }),
-      });
-    }
-    refreshGitStatus();
-  } catch (err) {
-    alert("Failed: " + err.message);
+    console.warn("Failed to refresh git status", err);
   }
 }
 
 // ============================================================
-// AI Assistant & Chat Engine
+// 9. Zero-Trust Approvals & Policy Governor
 // ============================================================
-
-function setAiPrompt(text) {
-  const textarea = document.getElementById("ai-prompt-input");
-  if (textarea) {
-    textarea.value = text;
-    textarea.focus();
-  }
-}
-
-function handleAiInputKey(event) {
-  if (event.key === "Enter" && !event.shiftKey) {
-    event.preventDefault();
-    handleAiPromptSubmit(event);
-  }
-}
-
-function clearAiChat() {
-  const viewport = document.getElementById("ai-chat-viewport");
-  if (viewport) {
-    viewport.innerHTML = `
-      <div class="ai-bubble assistant">
-        <div class="bubble-avatar">🛡️</div>
-        <div class="bubble-content">
-          <div class="bubble-header">
-            <strong>PNG5 AI Coding Agent</strong>
-            <span class="bubble-time">Ready</span>
-          </div>
-          <p>Chat cleared. Ready for your next coding task.</p>
-        </div>
-      </div>
-    `;
-  }
-}
-
-async function handleAiPromptSubmit(event, approvalId = null) {
-  if (event) event.preventDefault();
-
-  const textarea = document.getElementById("ai-prompt-input");
-  const promptText = approvalId ? activePromptForApproval : textarea?.value.trim();
-  if (!promptText) return;
-
-  const btnText = document.getElementById("ai-btn-text");
-  const spinner = document.getElementById("ai-spinner");
-  const btn = document.getElementById("btn-submit-ai");
-
-  if (!approvalId) {
-    appendAiMessage("user", promptText);
-    if (textarea) textarea.value = "";
-  }
-
-  if (btn) btn.disabled = true;
-  if (btnText) btnText.textContent = "Processing...";
-  if (spinner) spinner.classList.remove("hidden");
-
-  const msgId = `ai-msg-${Date.now()}`;
-  appendAiPlaceholder(msgId);
-
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-User-Id": "operator",
-      },
-      body: JSON.stringify({
-        prompt: promptText,
-        approvalId: approvalId || null,
-        activeFile: activeFilePath || undefined,
-        selectedElement: inspectedElement || undefined,
-      }),
-    });
-
-    const data = await res.json();
-    renderAiResponse(msgId, data);
-    fetchPendingApprovals();
-    fetchAuditLogs();
-    refreshGitStatus();
-
-    // If file was edited, reload in Monaco
-    if (data.steps && data.steps.some((s) => s.tool === "edit_project_file" || s.tool === "create_project_file")) {
-      for (const step of data.steps) {
-        const filePath = step.arguments?.path;
-        if (filePath) {
-          openFiles.delete(filePath);
-          openFileByPath(filePath);
-        }
-      }
-      reloadLivePreview();
-    }
-
-    // If human approval required
-    if (data.status === "approval_required" && data.approvalRequest) {
-      showApprovalModal(data.approvalRequest, promptText);
-    }
-  } catch (err) {
-    renderAiError(msgId, err.message || "Failed to communicate with AI server");
-  } finally {
-    if (btn) btn.disabled = false;
-    if (btnText) btnText.textContent = "Generate ➔";
-    if (spinner) spinner.classList.add("hidden");
-  }
-}
-
-function appendAiMessage(role, text) {
-  const container = document.getElementById("ai-chat-viewport");
-  if (!container) return;
-
-  const div = document.createElement("div");
-  div.className = `ai-bubble ${role}`;
-  div.innerHTML = `
-    <div class="bubble-avatar">${role === "user" ? "👤" : "🛡️"}</div>
-    <div class="bubble-content">
-      <div class="bubble-header">
-        <strong>${role === "user" ? "Operator" : "PNG5 AI Agent"}</strong>
-        <span class="bubble-time">${new Date().toLocaleTimeString()}</span>
-      </div>
-      <p>${escapeHtml(text)}</p>
-    </div>
-  `;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-}
-
-function appendAiPlaceholder(id) {
-  const container = document.getElementById("ai-chat-viewport");
-  if (!container) return;
-
-  const div = document.createElement("div");
-  div.className = "ai-bubble assistant";
-  div.id = id;
-  div.innerHTML = `
-    <div class="bubble-avatar">🤖</div>
-    <div class="bubble-content">
-      <div class="bubble-header">
-        <strong>PNG5 AI Agent</strong>
-        <span class="bubble-time">Evaluating Invariants...</span>
-      </div>
-      <div class="eval-spinner-row">
-        <span class="spinner" style="margin-right: 8px;"></span>
-        <span style="font-size: 0.8rem; color: var(--text-muted);">Analyzing prompt risk & Governor policies...</span>
-      </div>
-    </div>
-  `;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-}
-
-function renderAiResponse(id, data) {
-  const el = document.getElementById(id);
-  if (!el) return;
-
-  const contentEl = el.querySelector(".bubble-content");
-  let verdictBadge = "";
-
-  if (data.status === "completed") {
-    verdictBadge = `<span class="verdict-tag allow">ALLOW (Executed)</span>`;
-  } else if (data.status === "approval_required") {
-    verdictBadge = `<span class="verdict-tag escalate">ESCALATE (Approval Required)</span>`;
-  } else if (data.status === "denied") {
-    verdictBadge = `<span class="verdict-tag deny">DENY (Blocked by Policy)</span>`;
-  }
-
-  let stepsHtml = "";
-  if (data.steps && data.steps.length > 0) {
-    for (const s of data.steps) {
-      const outputText = s.toolResult?.content?.[0]?.text || "";
-      stepsHtml += `
-        <div class="ai-tool-step-card">
-          <div class="step-card-header">
-            <span>Step ${s.stepNumber}: Tool <code>${escapeHtml(s.tool || "none")}</code></span>
-            <span class="step-status ${s.status}">${s.status.toUpperCase()}</span>
-          </div>
-          <div class="step-thought">💡 ${escapeHtml(s.thought)}</div>
-          ${outputText ? `<pre class="step-output">${escapeHtml(outputText)}</pre>` : ""}
-        </div>
-      `;
-    }
-  }
-
-  contentEl.innerHTML = `
-    <div class="bubble-header">
-      <strong>PNG5 AI Agent</strong>
-      ${verdictBadge}
-      <span class="bubble-time">${new Date().toLocaleTimeString()}</span>
-    </div>
-    <div class="ai-markdown-body">${formatMarkdown(data.finalResponse)}</div>
-    ${stepsHtml}
-  `;
-
-  const container = document.getElementById("ai-chat-viewport");
-  if (container) container.scrollTop = container.scrollHeight;
-}
-
-function renderAiError(id, errText) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const contentEl = el.querySelector(".bubble-content");
-  contentEl.innerHTML = `
-    <div class="bubble-header">
-      <strong>System Error</strong>
-      <span class="verdict-tag deny">ERROR</span>
-    </div>
-    <p style="color: #ef4444;">${escapeHtml(errText)}</p>
-  `;
-}
-
-// ============================================================
-// Zero-Trust Governor & Human Authorization Modal
-// ============================================================
-
-function showApprovalModal(approval, promptText) {
-  activeApprovalId = approval.id;
-  activePromptForApproval = promptText;
-
-  const modal = document.getElementById("approval-modal");
-  const body = document.getElementById("modal-body-content");
-  if (!modal || !body) return;
-
-  body.innerHTML = `
-    <div class="approval-field"><strong>Action Tool:</strong> <code>${escapeHtml(approval.tool)}</code></div>
-    <div class="approval-field"><strong>Target Resource:</strong> <code>${escapeHtml(approval.target)}</code></div>
-    <div class="approval-field"><strong>Risk Score:</strong> <span style="color: #f59e0b; font-weight: 700;">${(approval.riskScore * 100).toFixed(0)}%</span></div>
-    <div class="approval-field"><strong>Policy Reason:</strong> ${escapeHtml(approval.reason)}</div>
-    <div class="approval-field"><strong>Parameters:</strong></div>
-    <pre class="approval-params-pre">${escapeHtml(JSON.stringify(approval.params, null, 2))}</pre>
-    <p style="margin-top: 10px; font-size: 0.75rem; color: var(--text-muted);">
-      Authorization token is cryptographically bound and valid for <strong>5 minutes</strong>.
-    </p>
-  `;
-
-  modal.classList.remove("hidden");
-}
-
-function closeApprovalModal() {
-  document.getElementById("approval-modal")?.classList.add("hidden");
-}
-
-async function handleModalDecision(decision) {
-  if (!activeApprovalId) return;
-
-  try {
-    const res = await fetch(`/api/approvals/${activeApprovalId}/decide`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision, reviewer: "operator" }),
-    });
-
-    closeApprovalModal();
-
-    if (decision === "approved") {
-      await handleAiPromptSubmit(null, activeApprovalId);
-    } else {
-      appendAiMessage("assistant", `🚫 Action **${activeApprovalId}** rejected by operator.`);
-    }
-
-    activeApprovalId = null;
-    activePromptForApproval = null;
-    fetchPendingApprovals();
-  } catch (err) {
-    alert("Approval error: " + err.message);
-  }
-}
 
 async function fetchPendingApprovals() {
   try {
     const res = await fetch("/api/approvals");
+    if (!res.ok) return;
     const data = await res.json();
-    const pending = data.approvals || [];
+    const approvals = data.approvals || [];
 
-    // Badges
-    const sbCount = document.getElementById("sidebar-pending-count");
-    const secBadge = document.getElementById("security-badge");
-    const statusApprovals = document.getElementById("sb-approvals-count");
+    const badge = document.getElementById("security-badge");
+    const countTag = document.getElementById("pending-approvals-count");
+    const container = document.getElementById("pending-approvals-container");
 
-    if (sbCount) sbCount.textContent = `${pending.length} PENDING`;
-    if (secBadge) {
-      secBadge.textContent = pending.length;
-      secBadge.classList.toggle("hidden", pending.length === 0);
+    if (badge) {
+      if (approvals.length > 0) {
+        badge.textContent = approvals.length;
+        badge.classList.remove("hidden");
+      } else {
+        badge.classList.add("hidden");
+      }
     }
-    if (statusApprovals) statusApprovals.textContent = `⚖️ ${pending.length} Approvals`;
 
-    // Sidebar list
-    const sidebarList = document.getElementById("sidebar-approvals-list");
-    if (!sidebarList) return;
+    if (countTag) {
+      countTag.textContent = `${approvals.length} Pending`;
+    }
 
-    if (pending.length === 0) {
-      sidebarList.innerHTML = `<div class="sidebar-empty">No actions pending authorization.</div>`;
+    if (!container) return;
+
+    if (approvals.length === 0) {
+      container.innerHTML = `<div class="sidebar-empty">No actions currently requiring operator authorization.</div>`;
       return;
     }
 
-    let html = "";
-    for (const a of pending) {
-      html += `
-        <div class="sidebar-approval-card">
-          <div class="approval-card-title"><code>${escapeHtml(a.tool)}</code> on <code>${escapeHtml(a.target)}</code></div>
-          <div class="approval-card-meta">Risk: ${(a.riskScore * 100).toFixed(0)}% • ID: ${escapeHtml(a.id)}</div>
-          <div class="approval-card-reason">${escapeHtml(a.reason)}</div>
-          <div class="approval-card-btns">
-            <button class="btn-card-approve" onclick="decideInlineApproval('${escapeHtml(a.id)}', 'approved')">Approve</button>
-            <button class="btn-card-reject" onclick="decideInlineApproval('${escapeHtml(a.id)}', 'rejected')">Reject</button>
-          </div>
+    container.innerHTML = approvals.map((a) => `
+      <div class="sidebar-approval-card">
+        <div class="approval-card-title">${escapeHtml(a.toolName || a.tool)}</div>
+        <div class="approval-card-meta">Risk: ${escapeHtml(a.riskLevel || "MEDIUM")} · Expires in ${Math.round((a.expiresAt - Date.now()) / 1000)}s</div>
+        <div class="approval-card-reason">${escapeHtml(a.reason || "Action requires human operator sign-off")}</div>
+        <div class="approval-card-btns">
+          <button class="btn-card-approve" onclick="decideApproval('${escapeHtml(a.id)}', 'APPROVED')">Authorize</button>
+          <button class="btn-card-reject" onclick="decideApproval('${escapeHtml(a.id)}', 'REJECTED')">Reject</button>
         </div>
-      `;
-    }
-    sidebarList.innerHTML = html;
-  } catch {
-    // Ignore error
+      </div>
+    `).join("");
+  } catch (err) {
+    console.warn("fetchPendingApprovals error", err);
   }
 }
 
-async function decideInlineApproval(id, decision) {
+async function decideApproval(id, decision) {
   try {
-    await fetch(`/api/approvals/${id}/decide`, {
+    const res = await fetch(`/api/approvals/${encodeURIComponent(id)}/decide`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision, reviewer: "operator" }),
+      body: JSON.stringify({ decision }),
     });
-    fetchPendingApprovals();
+    if (!res.ok) throw new Error("Decision rejected by server");
+    await fetchPendingApprovals();
+    await fetchAuditLogs();
   } catch (err) {
-    alert("Error: " + err.message);
+    alert("Approval decision failed: " + err.message);
   }
 }
 
 // ============================================================
-// Controlled Terminal Execution Panel
+// 10. Bottom Integrated Console (Terminal / Audit / Scenarios)
 // ============================================================
 
-function handleTerminalCommand(event) {
-  const input = document.getElementById("terminal-cmd-input");
-  if (!input) return;
+function switchBottomTab(tabName) {
+  activeBottomTab = tabName;
 
+  document.querySelectorAll(".panel-tab-btn").forEach((btn) => btn.classList.remove("active"));
+  document.querySelectorAll(".panel-view-content").forEach((panel) => panel.classList.remove("active"));
+
+  const btn = document.getElementById(`tab-btn-${tabName}`);
+  if (btn) btn.classList.add("active");
+
+  const panel = document.getElementById(`panel-view-${tabName}`);
+  if (panel) panel.classList.add("active");
+
+  if (tabName === "audit") fetchAuditLogs();
+  if (tabName === "scenarios") loadSecurityScenarios();
+}
+
+function toggleBottomPanel() {
+  const panel = document.getElementById("bottom-panel");
+  panel?.classList.toggle("collapsed");
+}
+
+function handleTerminalKeyDown(event) {
   if (event.key === "Enter") {
-    const cmd = input.value.trim();
+    const input = document.getElementById("terminal-input") || document.getElementById("terminal-cmd-input");
+    const cmd = input?.value.trim();
     if (!cmd) return;
 
     terminalHistory.push(cmd);
     terminalHistoryIndex = terminalHistory.length;
-    input.value = "";
+    if (input) input.value = "";
 
-    appendTerminalOutput(`❯ ${cmd}`, "stdin");
+    appendTerminalOutput(`$ ${cmd}`, "stdin");
     executeTerminalCommand(cmd);
   } else if (event.key === "ArrowUp") {
+    const input = document.getElementById("terminal-input");
     if (terminalHistoryIndex > 0) {
       terminalHistoryIndex--;
-      input.value = terminalHistory[terminalHistoryIndex];
+      if (input) input.value = terminalHistory[terminalHistoryIndex];
     }
   } else if (event.key === "ArrowDown") {
+    const input = document.getElementById("terminal-input");
     if (terminalHistoryIndex < terminalHistory.length - 1) {
       terminalHistoryIndex++;
-      input.value = terminalHistory[terminalHistoryIndex];
+      if (input) input.value = terminalHistory[terminalHistoryIndex];
     } else {
       terminalHistoryIndex = terminalHistory.length;
-      input.value = "";
+      if (input) input.value = "";
     }
   }
 }
@@ -1193,15 +903,14 @@ async function executeTerminalCommand(command) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ command }),
     });
-
     const data = await res.json();
     if (data.stdout) appendTerminalOutput(data.stdout, "stdout");
     if (data.stderr) appendTerminalOutput(data.stderr, "stderr");
-    if (data.exitCode !== 0) {
+    if (data.exitCode !== 0 && data.exitCode !== undefined) {
       appendTerminalOutput(`Process exited with code ${data.exitCode}`, "error");
     }
   } catch (err) {
-    appendTerminalOutput(`Execution error: ${err.message}`, "error");
+    appendTerminalOutput(`Command execution error: ${err.message}`, "error");
   }
 }
 
@@ -1219,110 +928,61 @@ function appendTerminalOutput(text, type = "stdout") {
 function clearTerminalOutput() {
   const container = document.getElementById("terminal-output");
   if (container) {
-    container.innerHTML = `<div class="terminal-line system">Terminal cleared.</div>`;
+    container.innerHTML = `<div class="terminal-line system">Console cleared.</div>`;
   }
 }
-
-async function runDiagnosticsTest(cmd) {
-  switchBottomTab("diagnostics");
-  const outputEl = document.getElementById("diagnostics-output");
-  if (outputEl) {
-    outputEl.innerHTML = `<div class="diagnostics-running"><span class="spinner"></span> Running <code>${escapeHtml(cmd)}</code>...</div>`;
-  }
-
-  try {
-    const res = await fetch("/api/terminal/exec", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command: cmd }),
-    });
-    const data = await res.json();
-
-    if (outputEl) {
-      outputEl.innerHTML = `
-        <div class="diagnostics-result ${data.exitCode === 0 ? "success" : "failed"}">
-          <h4>${data.exitCode === 0 ? "✅ Tests Passed" : "❌ Execution Failed"} (Exit code: ${data.exitCode})</h4>
-          <pre>${escapeHtml(data.stdout || data.stderr || "No output returned")}</pre>
-        </div>
-      `;
-    }
-  } catch (err) {
-    if (outputEl) {
-      outputEl.innerHTML = `<div class="diagnostics-result failed"><h4>Error</h4><pre>${escapeHtml(err.message)}</pre></div>`;
-    }
-  }
-}
-
-// ============================================================
-// Cryptographic Audit Ledger
-// ============================================================
 
 async function fetchAuditLogs() {
   try {
     const res = await fetch("/api/audit");
+    if (!res.ok) return;
     const data = await res.json();
-    const container = document.getElementById("audit-ledger-table-container");
-    const totalEl = document.getElementById("audit-total-records");
 
-    const logs = data.auditLogs || [];
-    if (totalEl) totalEl.textContent = `Total Records: ${logs.length}`;
+    const tbody = document.getElementById("audit-table-body");
+    const logs = data.auditLogs || data.records || [];
 
-    if (!container) return;
-
-    if (logs.length === 0) {
-      container.innerHTML = `<div class="sidebar-empty">No audit records recorded yet.</div>`;
-      return;
+    if (tbody) {
+      if (logs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No audit events recorded yet. Zero-Trust active.</td></tr>`;
+      } else {
+        tbody.innerHTML = logs.slice(-30).reverse().map((log, idx) => {
+          const timeStr = log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : "--:--:--";
+          const dec = (log.decision || log.verdict || "allow").toLowerCase();
+          const badgeClass = dec === "allow" ? "pill-success" : (dec === "escalate" || dec === "approval_required" ? "pill-warning" : "pill-danger");
+          const seq = log.sequenceNumber ?? (logs.length - idx);
+          const hmac = log.hmacSignature || log.hash || "valid_sha256";
+          return `
+            <tr>
+              <td>#${seq}</td>
+              <td>${timeStr}</td>
+              <td><span class="tool-tag">${escapeHtml(log.tool || log.action || "read_file")}</span></td>
+              <td class="res-col" title="${escapeHtml(log.resource || log.path || "")}">${escapeHtml((log.resource || log.path || "").substring(0, 35))}</td>
+              <td><span class="status-pill ${badgeClass}">${dec.toUpperCase()}</span></td>
+              <td><code class="hash-tag">${escapeHtml(hmac.substring(0, 10))}...</code></td>
+            </tr>
+          `;
+        }).join("");
+      }
     }
-
-    let tableHtml = `
-      <table class="audit-table">
-        <thead>
-          <tr>
-            <th>Timestamp</th>
-            <th>Tool</th>
-            <th>Resource</th>
-            <th>Decision</th>
-            <th>Session</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-
-    for (const log of logs.slice(-20).reverse()) {
-      const timeStr = new Date(log.timestamp).toLocaleTimeString();
-      const decClass = log.decision === "allow" ? "allow" : (log.decision === "approval_required" ? "escalate" : "deny");
-      tableHtml += `
-        <tr>
-          <td>${timeStr}</td>
-          <td><code>${escapeHtml(log.tool)}</code></td>
-          <td class="res-col" title="${escapeHtml(log.resource)}">${escapeHtml(log.resource)}</td>
-          <td><span class="verdict-tag ${decClass}">${escapeHtml(log.decision.toUpperCase())}</span></td>
-          <td><code>${escapeHtml(log.agentSessionId ? log.agentSessionId.substring(0, 8) + "..." : "system")}</code></td>
-        </tr>
-      `;
-    }
-
-    tableHtml += `</tbody></table>`;
-    container.innerHTML = tableHtml;
-  } catch {
-    // Ignore error
+  } catch (err) {
+    console.error("Failed to fetch audit logs", err);
   }
 }
 
-async function runAuditVerification() {
-  switchBottomTab("audit");
-  try {
-    const res = await fetch("/api/audit/verify");
-    const data = await res.json();
-
-    if (data.verified) {
-      alert(`✅ Cryptographic Audit Chain Verified!\n\nAll ${data.recordsChecked || "stored"} audit records form an intact, unbroken SHA-256 hash chain.`);
-    } else {
-      alert("❌ Audit chain validation error.");
-    }
-  } catch (err) {
-    alert("Verification request failed: " + err.message);
-  }
+function runAuditVerification() {
+  fetch("/api/audit/verify")
+    .then((r) => r.json())
+    .then((data) => {
+      const statusEl = document.getElementById("audit-verify-status");
+      if (statusEl) {
+        statusEl.textContent = data.valid || data.verified
+          ? `Cryptographic SHA-256 Ledger: VERIFIED (${data.totalRecords || data.recordsChecked || "stored"} events)`
+          : `Audit Chain Warning: Tamper detected!`;
+        statusEl.style.color = (data.valid || data.verified) ? "#00ff88" : "#ff3366";
+      }
+      alert((data.valid || data.verified) ? "✅ Audit Chain Integrity Verified: All SHA-256 HMAC signatures valid." : "⚠️ Audit Chain Tamper Detected!");
+    })
+    .catch((err) => alert("Audit check failed: " + err.message));
 }
 
 async function runTamperDemo() {
@@ -1330,263 +990,112 @@ async function runTamperDemo() {
   try {
     const res = await fetch("/api/audit/tamper-demo", { method: "POST" });
     const data = await res.json();
-    alert(`🧪 Tamper Simulation Alert:\n\n${data.message}\n\nExpected Hash: ${data.expectedHash}\nActual Hash:   ${data.actualHash}`);
+    alert(`🧪 Tamper Simulation Alert:\n\n${data.message || data.error}\n\nExpected Hash: ${data.expectedHash || "valid"}\nActual Hash:   ${data.actualHash || "corrupted"}`);
+    await fetchAuditLogs();
   } catch (err) {
     alert("Tamper demo error: " + err.message);
   }
 }
 
-// ============================================================
-// Live Preview & Visual Element Inspector
-// ============================================================
-
-function reloadLivePreview() {
-  const iframe = document.getElementById("live-preview-iframe");
-  if (iframe) {
-    iframe.src = `/preview/index.html?t=${Date.now()}`;
-  }
-}
-
-function openPreviewInNewTab() {
-  window.open("/preview/index.html", "_blank");
-}
-
-function setPreviewViewport(mode, btn) {
-  document.querySelectorAll(".btn-viewport").forEach((b) => b.classList.remove("active"));
-  if (btn) btn.classList.add("active");
-
-  const wrapper = document.getElementById("preview-frame-wrapper");
-  if (!wrapper) return;
-
-  wrapper.className = "preview-frame-wrapper";
-  if (mode === "tablet") wrapper.classList.add("viewport-tablet");
-  if (mode === "mobile") wrapper.classList.add("viewport-mobile");
-}
-
-function toggleElementInspector(btn) {
-  isInspectorActive = !isInspectorActive;
-  btn?.classList.toggle("active", isInspectorActive);
-  const statusEl = document.getElementById("inspector-status-bar");
-  statusEl?.classList.toggle("hidden", !isInspectorActive);
-}
-
-function handleInspectorMessage(event) {
-  if (event.data && event.data.type === "PNG5_INSPECT_ELEMENT") {
-    inspectedElement = event.data;
-    const textEl = document.getElementById("inspector-selected-text");
-    if (textEl) {
-      textEl.innerHTML = `Selected: <strong>&lt;${escapeHtml(inspectedElement.tag)} class="${escapeHtml(inspectedElement.className)}"&gt;</strong> "${escapeHtml(inspectedElement.text)}"`;
-    }
-  }
-}
-
-function sendInspectedElementToAi() {
-  if (!inspectedElement) return;
-  switchRightTab("assistant");
-  setAiPrompt(`Modify the selected element <${inspectedElement.tag} class="${inspectedElement.className}">: `);
-}
-
-// ============================================================
-// Project Switcher Modal
-// ============================================================
-
-function openProjectModal() {
-  document.getElementById("project-modal")?.classList.remove("hidden");
-  fetchRecentProjects();
-}
-
-function closeProjectModal() {
-  document.getElementById("project-modal")?.classList.add("hidden");
-}
-
-function closeModalOnBackdrop(event, modalId) {
-  if (event.target.id === modalId) {
-    document.getElementById(modalId)?.classList.add("hidden");
-  }
-}
-
-async function fetchRecentProjects() {
-  try {
-    const res = await fetch("/api/project/recent");
-    if (!res.ok) return;
-    const data = await res.json();
-    renderRecentProjectsList(data.recent || []);
-  } catch {
-    // ignore
-  }
-}
-
-function renderRecentProjectsList(projects) {
-  const container = document.getElementById("recent-projects-list");
+async function loadSecurityScenarios() {
+  const container = document.getElementById("scenarios-grid");
   if (!container) return;
 
-  if (!projects || projects.length === 0) {
-    container.innerHTML = `<div class="sidebar-empty">No recent projects.</div>`;
-    return;
-  }
-
-  let html = "";
-  for (const p of projects) {
-    html += `
-      <div class="recent-project-row" onclick="selectRecentProject('${escapeHtml(p)}')">
-        <span>📂 ${escapeHtml(p)}</span>
-      </div>
-    `;
-  }
-  container.innerHTML = html;
-}
-
-function selectRecentProject(path) {
-  const input = document.getElementById("custom-project-path-input");
-  if (input) input.value = path;
-  submitOpenProject();
-}
-
-async function submitOpenProject() {
-  const input = document.getElementById("custom-project-path-input");
-  const path = input?.value.trim() || "root";
-
   try {
-    const res = await fetch("/api/project/open", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path }),
-    });
+    const res = await fetch("/api/scenarios");
+    if (!res.ok) return;
+    const data = await res.json();
+    const scenarios = data.scenarios || [];
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.message || "Invalid path");
+    container.innerHTML = scenarios.map((s) => {
+      const riskClass = s.riskLevel === "CRITICAL" ? "pill-danger" : (s.riskLevel === "HIGH" ? "pill-warning" : "pill-success");
+      return `
+        <div class="scenario-card">
+          <div class="scenario-header">
+            <span class="scenario-title font-bold">${escapeHtml(s.title)}</span>
+            <span class="status-pill ${riskClass}">${escapeHtml(s.riskLevel)}</span>
+          </div>
+          <p class="scenario-desc">${escapeHtml(s.description)}</p>
+          <div class="scenario-prompt-box">
+            <code>${escapeHtml(s.prompt)}</code>
+          </div>
+          <button class="btn-micro btn-accent" onclick="injectPrompt('${escapeHtml(s.prompt).replace(/'/g, "\\'")}')">
+            Load into Assistant ⚡
+          </button>
+        </div>
+      `;
+    }).join("");
+  } catch (err) {
+    container.innerHTML = `<div class="sidebar-empty">Failed to load scenarios: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+// ============================================================
+// 11. Right Split Pane (AI Assistant & Live Preview)
+// ============================================================
+
+function switchRightTab(tab) {
+  activeRightTab = tab;
+  const previewTab = document.getElementById("right-tab-preview");
+  const assistantTab = document.getElementById("right-tab-assistant");
+  const previewView = document.getElementById("right-view-preview");
+  const assistantView = document.getElementById("right-view-assistant");
+
+  if (tab === "preview") {
+    previewTab?.classList.add("active");
+    assistantTab?.classList.remove("active");
+    previewView?.classList.add("active");
+    assistantView?.classList.remove("active");
+    refreshLivePreview();
+  } else {
+    assistantTab?.classList.add("active");
+    previewTab?.classList.remove("active");
+    assistantView?.classList.add("active");
+    previewView?.classList.remove("active");
+    document.getElementById("prompt-textarea")?.focus();
+  }
+}
+
+function setPreviewViewport(viewport) {
+  const iframeWrapper = document.getElementById("preview-iframe-wrapper");
+  const btnD = document.getElementById("preview-viewport-desktop");
+  const btnT = document.getElementById("preview-viewport-tablet");
+  const btnM = document.getElementById("preview-viewport-mobile");
+
+  btnD?.classList.toggle("active", viewport === "desktop");
+  btnT?.classList.toggle("active", viewport === "tablet");
+  btnM?.classList.toggle("active", viewport === "mobile");
+
+  if (iframeWrapper) {
+    if (viewport === "mobile") {
+      iframeWrapper.style.maxWidth = "375px";
+    } else if (viewport === "tablet") {
+      iframeWrapper.style.maxWidth = "768px";
+    } else {
+      iframeWrapper.style.maxWidth = "100%";
     }
-
-    closeProjectModal();
-    openFiles.clear();
-    await loadActiveProject();
-    await refreshProjectTree();
-    reloadLivePreview();
-    openFileByPath("style.css").catch(() => openFileByPath("index.html").catch(() => {}));
-  } catch (err) {
-    alert("Failed to open workspace: " + err.message);
   }
 }
 
-// ============================================================
-// New File / Folder Prompt Helpers
-// ============================================================
-
-async function promptNewFile() {
-  const name = prompt("Enter new file path (relative to workspace root):");
-  if (!name) return;
-
-  try {
-    const res = await fetch("/api/project/file/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: name, isDirectory: false, content: "" }),
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    await refreshProjectTree();
-    openFileByPath(name);
-  } catch (err) {
-    alert("Create file failed: " + err.message);
+function refreshLivePreview() {
+  const iframe = document.getElementById("preview-frame");
+  if (iframe) {
+    iframe.src = "/preview/index.html?t=" + Date.now();
   }
 }
-
-async function promptNewFolder() {
-  const name = prompt("Enter new folder path (relative to workspace root):");
-  if (!name) return;
-
-  try {
-    const res = await fetch("/api/project/file/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: name, isDirectory: true }),
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    await refreshProjectTree();
-  } catch (err) {
-    alert("Create folder failed: " + err.message);
-  }
-}
-
-// ============================================================
-// Global Keyboard Shortcuts
-// ============================================================
-
-function handleGlobalShortcuts(e) {
-  if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-    e.preventDefault();
-    saveActiveFile();
-  }
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "E") {
-    e.preventDefault();
-    switchActivityTab("explorer");
-  }
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "F") {
-    e.preventDefault();
-    switchActivityTab("search");
-    document.getElementById("codebase-search-input")?.focus();
-  }
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "G") {
-    e.preventDefault();
-    switchActivityTab("git");
-  }
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "A") {
-    e.preventDefault();
-    switchActivityTab("assistant");
-    document.getElementById("ai-prompt-input")?.focus();
-  }
-}
-
-// ============================================================
-// Markdown & HTML Formatters
-// ============================================================
-
-function escapeHtml(text) {
-  if (!text) return "";
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function formatMarkdown(text) {
-  if (!text) return "";
-  let html = escapeHtml(text);
-  // Bold
-  html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-  // Headers
-  html = html.replace(/^### (.*$)/gim, "<h3>$1</h3>");
-  html = html.replace(/^## (.*$)/gim, "<h2>$1</h2>");
-  html = html.replace(/^# (.*$)/gim, "<h1>$1</h1>");
-  // Inline Code
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-  // Code Blocks
-  html = html.replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>");
-  // Bullet lists
-  html = html.replace(/^\- (.*$)/gim, "<li>$1</li>");
-  // Numbered lists
-  html = html.replace(/^\d+\. (.*$)/gim, "<li>$1</li>");
-  return html;
-}
-
-// ============================================================
-// Enhanced UI & Layout Control Handlers
-// ============================================================
 
 function injectPrompt(text) {
-  const ta1 = document.getElementById("prompt-textarea");
-  const ta2 = document.getElementById("ai-prompt-input");
-  if (ta1) { ta1.value = text; ta1.focus(); }
-  if (ta2) { ta2.value = text; ta2.focus(); }
+  switchRightTab("assistant");
+  const ta = document.getElementById("prompt-textarea");
+  if (ta) {
+    ta.value = text;
+    ta.focus();
+  }
 }
 
 function handlePromptSubmit(event) {
   if (event) event.preventDefault();
-  const ta = document.getElementById("prompt-textarea") || document.getElementById("ai-prompt-input");
+  const ta = document.getElementById("prompt-textarea");
   const promptText = ta?.value.trim();
   if (!promptText) return;
 
@@ -1647,6 +1156,8 @@ function handlePromptSubmit(event) {
         openFiles.delete(activeFilePath);
         openFileByPath(activeFilePath);
       }
+      fetchPendingApprovals();
+      fetchAuditLogs();
     })
     .catch((err) => {
       if (chatContainer) {
@@ -1661,65 +1172,61 @@ function handlePromptSubmit(event) {
     });
 }
 
-function switchRightTab(tab) {
-  const previewTab = document.getElementById("right-tab-preview");
-  const assistantTab = document.getElementById("right-tab-assistant");
-  const previewView = document.getElementById("right-view-preview");
-  const assistantView = document.getElementById("right-view-assistant");
+// ============================================================
+// 12. Global Helpers & Formatting
+// ============================================================
 
-  if (tab === "preview") {
-    previewTab?.classList.add("active");
-    assistantTab?.classList.remove("active");
-    previewView?.classList.add("active");
-    assistantView?.classList.remove("active");
-  } else {
-    assistantTab?.classList.add("active");
-    previewTab?.classList.remove("active");
-    assistantView?.classList.add("active");
-    previewView?.classList.remove("active");
+function handleGlobalShortcuts(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+    e.preventDefault();
+    saveActiveFile();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "E") {
+    e.preventDefault();
+    switchActivityTab("explorer");
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "F") {
+    e.preventDefault();
+    switchActivityTab("search");
+    document.getElementById("codebase-search-input")?.focus();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "G") {
+    e.preventDefault();
+    switchActivityTab("git");
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "A") {
+    e.preventDefault();
+    switchActivityTab("assistant");
+    document.getElementById("prompt-textarea")?.focus();
   }
 }
 
-function setPreviewViewport(viewport) {
-  const iframeWrapper = document.getElementById("preview-iframe-wrapper");
-  const btnD = document.getElementById("preview-viewport-desktop");
-  const btnT = document.getElementById("preview-viewport-tablet");
-  const btnM = document.getElementById("preview-viewport-mobile");
-
-  btnD?.classList.toggle("active", viewport === "desktop");
-  btnT?.classList.toggle("active", viewport === "tablet");
-  btnM?.classList.toggle("active", viewport === "mobile");
-
-  if (iframeWrapper) {
-    if (viewport === "mobile") {
-      iframeWrapper.style.maxWidth = "375px";
-    } else if (viewport === "tablet") {
-      iframeWrapper.style.maxWidth = "768px";
-    } else {
-      iframeWrapper.style.maxWidth = "100%";
-    }
-  }
+function escapeHtml(text) {
+  if (!text) return "";
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-function refreshLivePreview() {
-  const iframe = document.getElementById("preview-frame");
-  if (iframe) {
-    iframe.src = "/preview/index.html?t=" + Date.now();
-  }
-}
-
-function runAuditVerification() {
-  fetch("/api/audit/verify")
-    .then((r) => r.json())
-    .then((data) => {
-      const statusEl = document.getElementById("audit-verify-status");
-      if (statusEl) {
-        statusEl.textContent = data.valid
-          ? `Cryptographic SHA-256 Ledger: VERIFIED (${data.totalRecords} events)`
-          : `Audit Chain Warning: Tamper detected at Seq #${data.firstBadSeq}`;
-        statusEl.style.color = data.valid ? "#00ff88" : "#ff3366";
-      }
-      alert(data.valid ? "✅ Audit Chain Integrity Verified: All SHA-256 HMAC signatures valid." : "⚠️ Audit Chain Tamper Detected at Seq #" + data.firstBadSeq);
-    })
-    .catch((err) => alert("Audit check failed: " + err.message));
+function formatMarkdown(text) {
+  if (!text) return "";
+  let html = escapeHtml(text);
+  // Bold
+  html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+  // Headers
+  html = html.replace(/^### (.*$)/gim, "<h3>$1</h3>");
+  html = html.replace(/^## (.*$)/gim, "<h2>$1</h2>");
+  html = html.replace(/^# (.*$)/gim, "<h1>$1</h1>");
+  // Inline Code
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // Code Blocks
+  html = html.replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>");
+  // Bullet lists
+  html = html.replace(/^\- (.*$)/gim, "<li>$1</li>");
+  // Numbered lists
+  html = html.replace(/^\d+\. (.*$)/gim, "<li>$1</li>");
+  return html;
 }
