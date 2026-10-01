@@ -1,0 +1,14 @@
+node_modules/
+**/node_modules/
+.git/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+.env.*.local
+dist/
+**/dist/

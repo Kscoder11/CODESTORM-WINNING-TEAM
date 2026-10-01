@@ -13,29 +13,25 @@ RUN npm ci
 COPY mcp-server/ ./
 RUN npm run build
 
-# Stage 2: Build Python Environment
-FROM python:3.11-slim AS py-builder
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
-
-# Stage 3: Final Production Runtime Container
+# Stage 2: Final Production Runtime Container
 FROM python:3.11-slim AS runner
 
 WORKDIR /app
 
-# Install Node.js runtime, curl, and git
+# Install Node.js runtime, curl, and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
+    gcc \
+    libsqlite3-dev \
     nodejs \
     npm \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python packages
-COPY --from=py-builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH
+# Install Python packages system-wide
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PORT=3000
@@ -47,7 +43,6 @@ COPY gateway/ ./gateway/
 COPY policies/ ./policies/
 COPY demo/ ./demo/
 COPY frontend/ ./frontend/
-COPY requirements.txt .
 
 # Copy built MCP Server
 COPY --from=node-builder /app/mcp-server/dist ./mcp-server/dist

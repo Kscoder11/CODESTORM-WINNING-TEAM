@@ -1,31 +1,24 @@
 # ==============================================================================
 # PNG5 NOMOS — Zero-Trust Policy Governor Daemon (FastAPI Backend)
 # ==============================================================================
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install build dependencies if needed
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libsqlite3-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Python packages system-wide
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Final minimal production stage
-FROM python:3.11-slim AS runner
-
-WORKDIR /app
-
-# Security: Create non-root user
+# Create non-root user
 RUN groupadd -r governor && useradd -r -g governor -d /app governor
 
-# Copy installed python packages from builder
-COPY --from=builder /root/.local /home/governor/.local
-ENV PATH=/home/governor/.local/bin:$PATH
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
