@@ -1,0 +1,47 @@
+# ==============================================================================
+# PNG5 NOMOS — Zero-Trust Policy Governor Daemon (FastAPI Backend)
+# ==============================================================================
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies if needed
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libsqlite3-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Final minimal production stage
+FROM python:3.11-slim AS runner
+
+WORKDIR /app
+
+# Security: Create non-root user
+RUN groupadd -r governor && useradd -r -g governor -d /app governor
+
+# Copy installed python packages from builder
+COPY --from=builder /root/.local /home/governor/.local
+ENV PATH=/home/governor/.local/bin:$PATH
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Copy application source code
+COPY --chown=governor:governor governor ./governor
+COPY --chown=governor:governor gateway ./gateway
+COPY --chown=governor:governor policies ./policies
+COPY --chown=governor:governor demo ./demo
+
+RUN mkdir -p /app/data && chown -R governor:governor /app
+
+USER governor
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')" || exit 1
+
+CMD ["uvicorn", "governor.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

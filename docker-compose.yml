@@ -1,46 +1,64 @@
-version: '3.8'
-
 services:
+  # 1. Zero-Trust Policy Governor Daemon (FastAPI Backend)
   governor:
-    image: python:3.11-slim
-    command: python -m http.server 8080 # Placeholder
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.governor
+    container_name: png5-governor
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - DB_PATH=/app/data/governor.db
+      - ORCHESTRATOR_API_KEY=orch_key_secret_123
+      - REVIEWER_API_KEY=rev_key_secret_456
+      - ADMIN_API_KEY=admin_key_secret_789
+    volumes:
+      - governor_data:/app/data
     networks:
       - agent_net
       - backend_net
 
-  gateway:
-    image: python:3.11-slim
-    command: python -m http.server 8080 # Placeholder
-    networks:
-      - backend_net
-
-  executor-image:
+  # 2. MCP Gateway & Monaco IDE Web Server (Node.js Gateway)
+  mcp-gateway:
     build:
-      context: ./executor
-    image: png5-executor
-    command: ["echo", "Executor image built"]
-
-  docker-proxy:
-    image: tecnativa/docker-socket-proxy
+      context: .
+      dockerfile: deployment/docker/Dockerfile.mcp
+    container_name: png5-mcp-gateway
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
     environment:
-      - CONTAINERS=1
-      - IMAGES=1
-      - VOLUMES=1
-      - POST=1
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - PORT=3000
+      - GOVERNOR_URL=http://governor:8000
+      - ORCHESTRATOR_KEY=orch_key_secret_123
+      - REVIEWER_KEY=rev_key_secret_456
+      - ADMIN_KEY=admin_key_secret_789
+    depends_on:
+      - governor
     networks:
+      - agent_net
       - backend_net
+      - ui_net
 
+  # 3. Mock Web & Sandbox Evaluation Service
   mock-web:
     build:
       context: ./mock-web
+    container_name: png5-mock-web
+    restart: unless-stopped
     networks:
       - backend_net
 
+volumes:
+  governor_data:
+    driver: local
+
 networks:
   agent_net:
-    internal: true
+    driver: bridge
   backend_net:
-    internal: true
+    driver: bridge
   ui_net:
+    driver: bridge

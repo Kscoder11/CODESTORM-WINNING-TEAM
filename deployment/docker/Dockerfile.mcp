@@ -1,0 +1,47 @@
+# ==============================================================================
+# PNG5 NOMOS — Model Context Protocol Gateway & Monaco IDE Server
+# ==============================================================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY mcp-server/package*.json ./mcp-server/
+RUN cd mcp-server && npm ci
+
+COPY mcp-server/ ./mcp-server/
+RUN cd mcp-server && npm run build
+
+# Production runner
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Install curl for container healthcheck and git for version control inspection
+RUN apk add --no-cache curl git
+
+# Create non-root user
+RUN addgroup -S png5 && adduser -S png5 -G png5
+
+# Copy built artifacts and production dependencies
+COPY --from=builder /app/mcp-server/dist ./mcp-server/dist
+COPY --from=builder /app/mcp-server/node_modules ./mcp-server/node_modules
+COPY --from=builder /app/mcp-server/package.json ./mcp-server/package.json
+
+# Copy static frontend and workspace demo surfaces
+COPY frontend/ ./frontend/
+COPY demo/ ./demo/
+COPY policies/ ./policies/
+
+RUN chown -R png5:png5 /app
+
+USER png5
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+CMD ["node", "mcp-server/dist/web-server.js"]
