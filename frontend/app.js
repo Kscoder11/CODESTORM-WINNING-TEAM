@@ -1144,7 +1144,7 @@ function handlePromptSubmit(event) {
             <span class="msg-author">NOMOS AI AGENT</span>
             <span class="msg-time">${new Date().toLocaleTimeString()}</span>
           </div>
-          <div class="msg-text">${formatMarkdown(data.response || data.message || "Action processed.")}</div>
+          <div class="msg-text">${formatMarkdown(data.finalResponse || data.response || data.message || "Action processed.")}</div>
           ${verdictBadge}
           ${stepsHtml}
         `;
@@ -1152,7 +1152,16 @@ function handlePromptSubmit(event) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
       refreshLivePreview();
-      if (activeFilePath) {
+      refreshProjectTree();
+      refreshGitStatus();
+      if (data.steps && data.steps.length > 0) {
+        for (const step of data.steps) {
+          const filePath = step.arguments?.path;
+          if (filePath && typeof filePath === "string") {
+            openFileByPath(filePath);
+          }
+        }
+      } else if (activeFilePath) {
         openFiles.delete(activeFilePath);
         openFileByPath(activeFilePath);
       }

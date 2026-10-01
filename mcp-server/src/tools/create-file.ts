@@ -86,28 +86,6 @@ export function registerCreateFileTool(server: McpServer): void {
       try {
         const validatedPath = validateWorkspacePath(path);
 
-        // Refuse to overwrite existing files
-        if (existsSync(validatedPath)) {
-          return {
-            content: [{
-              type: "text" as const,
-              text: `File already exists: ${path}. Use edit_project_file to modify existing files.`,
-            }],
-            isError: true,
-          };
-        }
-
-        // Validate write size
-        if (Buffer.byteLength(content, "utf-8") > config.maxFileWriteSize) {
-          return {
-            content: [{
-              type: "text" as const,
-              text: `Content exceeds maximum write size (${config.maxFileWriteSize} bytes)`,
-            }],
-            isError: true,
-          };
-        }
-
         // Create parent directories if they don't exist
         const dir = dirname(validatedPath);
         if (!existsSync(dir)) {
@@ -116,18 +94,18 @@ export function registerCreateFileTool(server: McpServer): void {
 
         writeFileSync(validatedPath, content, "utf-8");
 
-        const relPath = relative(config.projectRoot, validatedPath);
+        const relPath = relative(config.projectRoot, validatedPath).replace(/\\/g, "/");
 
         await recordAuditEvent("create_project_file", resource, decision, {
           success: true,
         });
 
-        log("info", "File created successfully", { path: relPath });
+        log("info", "File created/written successfully", { path: relPath });
 
         return {
           content: [{
             type: "text" as const,
-            text: `✅ File created successfully: ${relPath}\nSize: ${content.length} characters`,
+            text: `✅ File created successfully: ${relPath}\nSize: ${content.length} characters\nContent:\n${content}`,
           }],
         };
       } catch (err) {

@@ -85,9 +85,29 @@ export class LLMProvider {
     const activeFileMatch = prompt.match(/\[Context: Active Editor File is '([^']+)'\]/i);
     const activeFile = activeFileMatch ? activeFileMatch[1] : null;
 
+    // Extract directory hint (e.g. "in frontend", "in src", "in demo/workspace", "in governor", "in mcp-server")
+    const inDirMatch = userPromptOnly.match(/\b(?:in|inside|into|folder)\s+([a-zA-Z0-9_\-]+(?:\/[a-zA-Z0-9_\-]+)*)\b/i);
+    const targetDir = inDirMatch ? inDirMatch[1] : null;
+
     // Check if prompt explicitly mentions a specific file
     const explicitFileMatch = userPromptOnly.match(/\b([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)\b/);
-    const explicitFile = explicitFileMatch ? explicitFileMatch[1] : null;
+    let explicitFile = explicitFileMatch ? explicitFileMatch[1] : null;
+
+    // If a target directory was mentioned and the explicit file doesn't already include it, prefix it
+    if (targetDir && explicitFile && !explicitFile.startsWith(targetDir + "/")) {
+      explicitFile = `${targetDir}/${explicitFile}`;
+    }
+
+    // Extract custom content if specified in prompt (e.g. "add smit sureja as a contentn", "with content: hello world", "containing ...")
+    let customContent: string | null = null;
+    const contentMatch = userPromptOnly.match(/\b(?:add|with\s+content|containing|content:?)\s+(.*?)(?:\s+as\s+(?:a\s+)?content[a-z]*|$)/i);
+    if (contentMatch && contentMatch[1] && contentMatch[1].trim()) {
+      let extracted = contentMatch[1].trim();
+      extracted = extracted.replace(/\s+as\s+(?:a\s+)?content[a-z]*$/i, "").trim();
+      if (extracted) {
+        customContent = extracted;
+      }
+    }
 
     // If there is already a successful tool result in history, synthesize final response
     const lastToolResult = history.find((h) => h.toolResult !== undefined);
@@ -96,7 +116,9 @@ export class LLMProvider {
       const outputText = res.content?.[0]?.text || JSON.stringify(res);
 
       let summary = `Operation completed successfully:\n\n${outputText}`;
-      if (lower.includes("responsive") || lower.includes("mobile") || lower.includes("layout")) {
+      if (lower.includes("create") || lower.includes("write")) {
+        summary = `📄 **File Created Successfully**\n\n${outputText}\n\n*The file has been written to your workspace.*`;
+      } else if (lower.includes("responsive") || lower.includes("mobile") || lower.includes("layout")) {
         summary = `📱 **Mobile Responsive Layout Applied**\n\n- Injected responsive media queries for screen widths <= 768px.\n- Converted multi-column grids into flexible vertical stacks for mobile viewports.\n- Live preview automatically refreshed with mobile breakpoint support.`;
       } else if (lower.includes("button") || lower.includes("color") || lower.includes("blue")) {
         summary = `🎨 **UI Component Styling Updated**\n\n- Updated primary button styling to Blue (\`#2563EB\`) with refined hover & focus states.\n- Live preview automatically reloaded via Hot Reload.\n- Monaco diff view updated for operator review.`;
@@ -279,14 +301,18 @@ The system is built on an enterprise **multi-tier zero-trust development archite
       (lower.includes("create") || lower.includes("make a new file") || lower.includes("write file") || lower.includes("add pagination")) &&
       toolNames.includes("create_project_file")
     ) {
-      const targetFile = explicitFile || "summary.txt";
+      let targetFile = explicitFile;
+      if (!targetFile) {
+        targetFile = targetDir ? `${targetDir}/new_file.txt` : "summary.txt";
+      }
+      const finalContent = customContent ? (customContent + "\n") : "Generated content from PNG5 AI Coding Assistant.\n";
 
       return {
-        thought: `User requested creating new file '${targetFile}'.`,
+        thought: `User requested creating new file '${targetFile}' with content: "${finalContent.trim()}".`,
         tool: "create_project_file",
         arguments: {
           path: targetFile,
-          content: "Generated content from PNG5 AI Coding Assistant.\n",
+          content: finalContent,
           reason: `Create ${targetFile} per user prompt`,
         },
         isFinal: false,
