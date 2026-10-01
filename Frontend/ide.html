@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PNG5 AI Local IDE — Intelligent Development Environment & Security Governor</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Monaco Editor CDN Loader -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+</head>
+<body class="dark-ide-theme">
+  <div class="ide-app-container">
+    
+    <!-- ============================================================ -->
+    <!-- 1. Activity Bar (Leftmost Ribbon)                            -->
+    <!-- ============================================================ -->
+    <aside class="activity-bar">
+      <div class="activity-top">
+        <a href="/" class="activity-icon-btn logo-brand-btn" title="Back to Product Overview & Landing Page">
+          <span class="act-icon" style="color: #38bdf8; font-size: 1.25rem;">⚡</span>
+        </a>
+        <a href="/presentation" class="activity-icon-btn" title="🏆 Open Judge Presentation Mode & Interactive Pitch Deck" style="color: #f59e0b;">
+          <span class="act-icon">🏆</span>
+        </a>
+        <button class="activity-icon-btn active" id="act-btn-explorer" title="Project Explorer (Ctrl+Shift+E)" onclick="switchActivityTab('explorer')">
+          <span class="act-icon">📁</span>
+        </button>
+        <button class="activity-icon-btn" id="act-btn-search" title="Search Codebase (Ctrl+Shift+F)" onclick="switchActivityTab('search')">
+          <span class="act-icon">🔍</span>
+        </button>
+        <button class="activity-icon-btn" id="act-btn-git" title="Source Control & Git (Ctrl+Shift+G)" onclick="switchActivityTab('git')">
+          <span class="act-icon">🌿</span>
+          <span id="git-badge" class="activity-badge hidden">0</span>
+        </button>
+        <button class="activity-icon-btn" id="act-btn-assistant" title="AI Coding Assistant (Ctrl+Shift+A)" onclick="switchActivityTab('assistant')">
+          <span class="act-icon">🤖</span>
+        </button>
+        <button class="activity-icon-btn" id="act-btn-preview" title="Live Application Preview" onclick="switchActivityTab('preview')">
+          <span class="act-icon">⚡</span>
+          <span class="live-dot-mini"></span>
+        </button>
+        <button class="activity-icon-btn" id="act-btn-security" title="Zero-Trust Approvals & Policy Governor" onclick="switchActivityTab('security')">
+          <span class="act-icon">🛡️</span>
+          <span id="security-badge" class="activity-badge hidden">0</span>
+        </button>
+      </div>
+
+      <div class="activity-bottom">
+        <button class="activity-icon-btn" title="Open Folder / Switch Workspace" onclick="openProjectModal()">
+          <span class="act-icon">📂</span>
+        </button>
+        <button class="activity-icon-btn" title="Cryptographic Audit Chain" onclick="runAuditVerification()">
+          <span class="act-icon" id="activity-chain-icon">🔒</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ============================================================ -->
+    <!-- 2. Primary Sidebar (Project Tree / Search / Git / SOC)        -->
+    <!-- ============================================================ -->
+    <aside class="primary-sidebar" id="primary-sidebar">
+      
+      <!-- Explorer View -->
+      <div class="sidebar-view-panel active" id="sidebar-explorer">
+        <div class="sidebar-header">
+          <div class="project-title-box">
+            <span class="section-label">PROJECT WORKSPACE</span>
+            <div class="project-selector" onclick="openProjectModal()">
+              <h2 id="active-project-name">workspace</h2>
+              <span class="dropdown-arrow">▾</span>
+            </div>
+          </div>
+          <div class="tree-actions">
+            <button class="icon-tool-btn" title="New File" onclick="promptNewFile()">📄+</button>
+            <button class="icon-tool-btn" title="New Folder" onclick="promptNewFolder()">📁+</button>
+            <button class="icon-tool-btn" title="Refresh Explorer" onclick="refreshProjectTree()">↻</button>
+          </div>
+        </div>
+
+        <div class="file-tree-container" id="file-tree-container">
+          <div class="tree-loading">Loading project structure...</div>
+        </div>
+      </div>
+
+      <!-- Search View -->
+      <div class="sidebar-view-panel" id="sidebar-search">
+        <div class="sidebar-header">
+          <span class="section-label">SEARCH CODEBASE</span>
+        </div>
+        <div class="sidebar-search-box">
+          <div class="input-with-icon">
+            <input type="text" id="codebase-search-input" placeholder="Search text or pattern..." onkeydown="handleSearchKeyDown(event)" />
+            <button class="btn-search-exec" onclick="execCodebaseSearch()">➔</button>
+          </div>
+        </div>
+        <div class="search-results-container" id="search-results-container">
+          <div class="sidebar-empty">Type pattern above and press Enter to search.</div>
+        </div>
+      </div>
+
+      <!-- Source Control / Git View -->
+      <div class="sidebar-view-panel" id="sidebar-git">
+        <div class="sidebar-header">
+          <span class="section-label">SOURCE CONTROL</span>
+          <span class="git-branch-tag" id="git-branch-tag">🌿 main</span>
+        </div>
+        <div class="git-actions-toolbar">
+          <button class="btn-action-sm" onclick="refreshGitStatus()">↻ Refresh</button>
+          <button class="btn-action-sm" onclick="discardAllChanges()">Discard All</button>
+        </div>
+        <div class="git-changes-list" id="git-changes-list">
+          <div class="sidebar-empty">No uncommitted changes. Working tree clean.</div>
+        </div>
+      </div>
+
+      <!-- Security & Approvals View -->
+      <div class="sidebar-view-panel" id="sidebar-security">
+        <div class="sidebar-header">
+          <span class="section-label">ZERO-TRUST GOVERNOR</span>
+          <span class="badge-amber" id="sidebar-pending-count">0 PENDING</span>
+        </div>
+        <div class="security-sidebar-content" id="sidebar-approvals-list">
+          <div class="sidebar-empty">No actions pending authorization.</div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ============================================================ -->
+    <!-- 3. Center Area (Monaco Code Editor & Diff Viewer)             -->
+    <!-- ============================================================ -->
+    <main class="main-editor-area">
+      
+      <!-- Editor Top Bar & Tab Strip -->
+      <div class="editor-tab-strip">
+        <div class="editor-tabs" id="editor-tabs-container">
+          <!-- Injected via app.js -->
+        </div>
+        <div class="editor-view-controls">
+          <button class="btn-view-mode active" id="btn-mode-editor" onclick="setEditorViewMode('editor')">Code</button>
+          <button class="btn-view-mode" id="btn-mode-diff" onclick="setEditorViewMode('diff')">Diff</button>
+          <button class="btn-view-mode" id="btn-toggle-preview" onclick="switchRightTab('preview')" title="Toggle Live Preview View">⚡ Live Preview</button>
+          <button class="btn-save-file" onclick="saveActiveFile()" title="Save File (Ctrl+S)">💾 Save</button>
+        </div>
+      </div>
+
+      <!-- Breadcrumbs Path -->
+      <div class="editor-breadcrumb-bar">
+        <span class="breadcrumb-icon">📄</span>
+        <span id="editor-breadcrumb-text">No file open</span>
+      </div>
+
+      <!-- Code Editor Surface (Monaco) -->
+      <div class="editor-surface-container">
+        <div id="monaco-editor-container" class="monaco-container"></div>
+        <div id="monaco-diff-container" class="monaco-container hidden"></div>
+      </div>
+
+      <!-- Bottom Integrated Terminal & Diagnostics Panel -->
+      <div class="bottom-panel" id="bottom-panel">
+        <div class="bottom-panel-header">
+          <div class="panel-tabs">
+            <button class="panel-tab-btn active" onclick="switchBottomTab('terminal')">Terminal</button>
+            <button class="panel-tab-btn" onclick="switchBottomTab('diagnostics')">Tests & Diagnostics</button>
+            <button class="panel-tab-btn" onclick="switchBottomTab('audit')">Audit Ledger</button>
+          </div>
+          <div class="panel-controls">
+            <button class="btn-icon" title="Clear Terminal" onclick="clearTerminalOutput()">⊘</button>
+            <button class="btn-icon" title="Toggle Bottom Panel" onclick="toggleBottomPanel()">_</button>
+          </div>
+        </div>
+
+        <div class="bottom-panel-content">
+          <!-- Terminal Subpanel -->
+          <div class="bottom-subpanel active" id="bottom-terminal">
+            <div class="terminal-output-scroll" id="terminal-output">
+              <div class="terminal-line system">PNG5 Controlled Terminal Environment initialized. Type command and press Enter.</div>
+            </div>
+            <div class="terminal-input-row">
+              <span class="terminal-prompt-symbol">❯</span>
+              <input type="text" id="terminal-cmd-input" placeholder="Enter shell command (e.g. npm test, git status)..." onkeydown="handleTerminalCommand(event)" />
+            </div>
+          </div>
+
+          <!-- Diagnostics Subpanel -->
+          <div class="bottom-subpanel" id="bottom-diagnostics">
+            <div class="diagnostics-toolbar">
+              <button class="btn-action-sm" onclick="runDiagnosticsTest('npm test')">▶ Run Test Suite</button>
+              <button class="btn-action-sm" onclick="runDiagnosticsTest('git status')">▶ Run Git Check</button>
+            </div>
+            <div class="diagnostics-output" id="diagnostics-output">
+              <p style="color: var(--text-muted);">Ready to run tests and validation checks.</p>
+            </div>
+          </div>
+
+          <!-- Audit Ledger Subpanel -->
+          <div class="bottom-subpanel" id="bottom-audit">
+            <div class="audit-summary-row">
+              <span id="audit-total-records">Total Records: 0</span>
+              <button class="btn-action-sm" onclick="runAuditVerification()">🔍 Verify Cryptographic Chain</button>
+              <button class="btn-action-sm danger" onclick="runTamperDemo()">🧪 Tamper Demo</button>
+            </div>
+            <div class="audit-table-scroll" id="audit-ledger-table-container">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ============================================================ -->
+    <!-- 4. Right Split Panel (AI Assistant & Live Preview)           -->
+    <!-- ============================================================ -->
+    <aside class="right-assistant-preview" id="right-assistant-preview">
+      
+      <div class="right-panel-header">
+        <div class="right-tab-switch">
+          <button class="right-tab-btn active" id="tab-btn-assistant" onclick="switchRightTab('assistant')">
+            <span>🤖 AI Assistant</span>
+          </button>
+          <button class="right-tab-btn" id="tab-btn-preview" onclick="switchRightTab('preview')">
+            <span>⚡ Live Preview</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Right Tab 1: Conversational AI Coding Assistant -->
+      <div class="right-subpanel active" id="right-panel-assistant">
+        
+        <!-- Quick Prompt Chips -->
+        <div class="ai-prompt-chips">
+          <button class="ai-chip" onclick="setAiPrompt('Change the primary button color to blue')">🎨 Button Color</button>
+          <button class="ai-chip" onclick="setAiPrompt('Make the layout responsive for mobile')">📱 Responsive UI</button>
+          <button class="ai-chip" onclick="setAiPrompt('Explain how the architecture works')">📖 Explain Code</button>
+          <button class="ai-chip" onclick="setAiPrompt('Run the tests and fix failures')">🧪 Run Tests</button>
+        </div>
+
+        <!-- Chat Viewport -->
+        <div class="ai-chat-viewport" id="ai-chat-viewport">
+          <div class="ai-bubble assistant">
+            <div class="bubble-avatar">🛡️</div>
+            <div class="bubble-content">
+              <div class="bubble-header">
+                <strong>PNG5 AI Coding Agent</strong>
+                <span class="bubble-time">Ready</span>
+              </div>
+              <p>I am your Governed AI Coding Assistant. You can ask me to modify UI components, explain codebase architecture, search patterns, or run tests.</p>
+              <p style="margin-top: 6px; font-size: 0.75rem; color: var(--text-muted);">All file writes and executions are evaluated against <strong>Zero-Trust Governor Invariants</strong>.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Input Form -->
+        <form class="ai-input-form" onsubmit="handleAiPromptSubmit(event)">
+          <div class="ai-input-wrapper">
+            <div class="active-file-tag" id="ai-active-file-tag">
+              <span>📄 Active: <strong id="ai-context-filename">None</strong></span>
+            </div>
+            <textarea
+              id="ai-prompt-input"
+              class="ai-textarea"
+              placeholder="Ask AI to modify code, explain architecture, fix bugs, or change styles..."
+              rows="2"
+              onkeydown="handleAiInputKey(event)"
+            ></textarea>
+            <div class="ai-form-bottom">
+              <button type="button" class="btn-clear-chat" onclick="clearAiChat()">Clear</button>
+              <button type="submit" id="btn-submit-ai" class="btn-send-ai">
+                <span id="ai-btn-text">Generate ➔</span>
+                <span id="ai-spinner" class="spinner hidden"></span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Right Tab 2: Real-time Live Preview Panel -->
+      <div class="right-subpanel" id="right-panel-preview">
+        
+        <!-- Live Preview Controls Bar -->
+        <div class="preview-toolbar">
+          <div class="preview-url-box">
+            <span class="url-dot online" id="preview-status-dot"></span>
+            <span class="preview-url-text" id="preview-url-text">http://localhost:3000/preview/index.html</span>
+          </div>
+          <div class="preview-viewport-btns">
+            <button class="btn-viewport active" title="Desktop Viewport" onclick="setPreviewViewport('desktop', this)">🖥️</button>
+            <button class="btn-viewport" title="Tablet Viewport" onclick="setPreviewViewport('tablet', this)">📟</button>
+            <button class="btn-viewport" title="Mobile Viewport" onclick="setPreviewViewport('mobile', this)">📱</button>
+            <button class="btn-viewport" title="Inspect Element" id="btn-inspect-element" onclick="toggleElementInspector(this)">🔍</button>
+            <button class="btn-viewport" title="Reload Preview" onclick="reloadLivePreview()">↻</button>
+            <button class="btn-viewport" title="Open Live Preview in New Window" onclick="openPreviewInNewTab()">↗</button>
+          </div>
+        </div>
+
+        <!-- Iframe Live Preview Container -->
+        <div class="preview-frame-wrapper" id="preview-frame-wrapper">
+          <iframe id="live-preview-iframe" class="preview-iframe" src="/preview/index.html"></iframe>
+        </div>
+
+        <!-- Inspector Context Bar -->
+        <div class="inspector-status-bar hidden" id="inspector-status-bar">
+          <span class="inspect-icon">🔍</span>
+          <span id="inspector-selected-text">Click any element in preview to select it for AI editing</span>
+          <button class="btn-action-sm" onclick="sendInspectedElementToAi()">Edit Selected Element ➔</button>
+        </div>
+      </div>
+
+    </aside>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- 5. Bottom Status Bar                                         -->
+  <!-- ============================================================ -->
+  <footer class="ide-status-bar">
+    <div class="status-bar-left">
+      <span class="status-item" id="sb-project-name">📂 workspace</span>
+      <span class="status-item" id="sb-git-branch">🌿 main</span>
+      <span class="status-item" id="sb-file-info">📄 style.css • CSS</span>
+    </div>
+    <div class="status-bar-right">
+      <span class="status-item clickable" id="sb-preview-status" onclick="switchRightTab('preview')" style="cursor: pointer;" title="Toggle Live Preview View">⚡ Preview: Active</span>
+      <span class="status-item" id="sb-approvals-count">⚖️ 0 Approvals</span>
+      <span class="status-item online" id="sb-agent-status">🤖 Agent: Ready</span>
+    </div>
+  </footer>
+
+  <!-- ============================================================ -->
+  <!-- Modals & Overlays                                            -->
+  <!-- ============================================================ -->
+
+  <!-- Open Project Folder Modal -->
+  <div id="project-modal" class="modal-overlay hidden" onclick="closeModalOnBackdrop(event, 'project-modal')">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-header-icon">📂</div>
+        <div>
+          <h3>Open Local Project Workspace</h3>
+          <p class="modal-sub">Select directory from your computer</p>
+        </div>
+        <button class="modal-close" onclick="closeProjectModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">WORKSPACE DIRECTORY PATH:</label>
+        <input type="text" id="custom-project-path-input" class="ide-input" style="width: 100%; margin-top: 6px;" placeholder="e.g. D:\CODESTORM-WINNING-TEAM or root" />
+        
+        <div style="margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap;">
+          <button type="button" class="btn-action-sm" onclick="selectRecentProject('root')" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); font-weight: 600;">🌟 Entire Project Root</button>
+          <button type="button" class="btn-action-sm" onclick="selectRecentProject('frontend')">🎨 Frontend UI</button>
+          <button type="button" class="btn-action-sm" onclick="selectRecentProject('governor')">🛡️ Governor</button>
+          <button type="button" class="btn-action-sm" onclick="selectRecentProject('mcp-server')">🔌 MCP Server</button>
+          <button type="button" class="btn-action-sm" onclick="selectRecentProject('demo/workspace')">⚡ Demo Workspace</button>
+        </div>
+
+        <div style="margin-top: 14px;">
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">RECENT WORKSPACES:</span>
+          <div class="recent-projects-list" id="recent-projects-list">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary-action" onclick="closeProjectModal()">Cancel</button>
+        <button class="btn-primary-action" onclick="submitOpenProject()">Open Workspace ➔</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Human Authorization Modal -->
+  <div id="approval-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-header-icon">⚠️</div>
+        <div>
+          <h3>Human Authorization Required</h3>
+          <p class="modal-sub">High-Risk Operation Intercepted by Policy Governor</p>
+        </div>
+        <button class="modal-close" onclick="closeApprovalModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body-content">
+        <!-- Injected via JS -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn-modal-reject" onclick="handleModalDecision('rejected')">Reject & Block Action</button>
+        <button class="btn-modal-approve" onclick="handleModalDecision('approved')">Approve & Execute ➔</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1146,20 +1146,32 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     // Static Frontend & Landing Page Serving (/ , /ide , /landing , /static/*)
     // ============================================================
     if (method === "GET") {
-      let filePath: string;
-      if (pathname === "/" || pathname === "/landing") {
-        filePath = existsSync(resolve(FRONTEND_DIR, "landing.html")) ? "landing.html" : "index.html";
-      } else if (pathname === "/ide" || pathname === "/app") {
-        filePath = "index.html";
-      } else if (pathname === "/cyber" || pathname === "/soc" || pathname === "/nomos" || pathname === "/console") {
-        filePath = existsSync(resolve(FRONTEND_DIR, "cyber.html")) ? "cyber.html" : "index.html";
-      } else if (pathname === "/presentation" || pathname === "/pitch" || pathname === "/judge" || pathname === "/demo") {
-        filePath = existsSync(resolve(FRONTEND_DIR, "presentation.html")) ? "presentation.html" : "landing.html";
-      } else {
-        filePath = pathname.replace(/^\//, "");
-      }
+      let resolvedPath = "";
 
-      let resolvedPath = resolve(FRONTEND_DIR, filePath);
+      if (pathname === "/" || pathname === "/cyber" || pathname === "/soc" || pathname === "/nomos" || pathname === "/console") {
+        const distIndex = resolve(FRONTEND_DIR, "dist", "index.html");
+        resolvedPath = existsSync(distIndex) ? distIndex : resolve(FRONTEND_DIR, "cyber.html");
+        if (!existsSync(resolvedPath)) {
+          resolvedPath = resolve(FRONTEND_DIR, "index.html");
+        }
+      } else if (pathname === "/ide" || pathname === "/app") {
+        const idePath = resolve(FRONTEND_DIR, "ide.html");
+        resolvedPath = existsSync(idePath) ? idePath : resolve(FRONTEND_DIR, "index.html");
+      } else if (pathname === "/landing") {
+        const landingPath = resolve(FRONTEND_DIR, "landing.html");
+        resolvedPath = existsSync(landingPath) ? landingPath : resolve(FRONTEND_DIR, "index.html");
+      } else if (pathname === "/presentation" || pathname === "/pitch" || pathname === "/judge" || pathname === "/demo") {
+        const presPath = resolve(FRONTEND_DIR, "presentation.html");
+        resolvedPath = existsSync(presPath) ? presPath : resolve(FRONTEND_DIR, "landing.html");
+      } else {
+        const cleanPath = pathname.replace(/^\//, "");
+        const distCandidate = resolve(FRONTEND_DIR, "dist", cleanPath);
+        if (existsSync(distCandidate) && statSync(distCandidate).isFile()) {
+          resolvedPath = distCandidate;
+        } else {
+          resolvedPath = resolve(FRONTEND_DIR, cleanPath);
+        }
+      }
 
       if (!resolvedPath.startsWith(FRONTEND_DIR)) {
         res.writeHead(403, { "Content-Type": "text/plain" });
@@ -1177,10 +1189,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         return;
       }
 
-      // Fallback index.html
-      const indexPath = resolve(FRONTEND_DIR, "index.html");
-      if (existsSync(indexPath)) {
-        const content = readFileSync(indexPath);
+      // Fallback to dist/index.html or index.html
+      const distFallback = resolve(FRONTEND_DIR, "dist", "index.html");
+      const fallbackPath = existsSync(distFallback) ? distFallback : resolve(FRONTEND_DIR, "index.html");
+      if (existsSync(fallbackPath)) {
+        const content = readFileSync(fallbackPath);
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(content);
         return;
