@@ -1151,6 +1151,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         filePath = existsSync(resolve(FRONTEND_DIR, "landing.html")) ? "landing.html" : "index.html";
       } else if (pathname === "/ide" || pathname === "/app") {
         filePath = "index.html";
+      } else if (pathname === "/cyber" || pathname === "/soc" || pathname === "/nomos" || pathname === "/console") {
+        filePath = existsSync(resolve(FRONTEND_DIR, "cyber.html")) ? "cyber.html" : "index.html";
+      } else if (pathname === "/presentation" || pathname === "/pitch" || pathname === "/judge" || pathname === "/demo") {
+        filePath = existsSync(resolve(FRONTEND_DIR, "presentation.html")) ? "presentation.html" : "landing.html";
       } else {
         filePath = pathname.replace(/^\//, "");
       }
