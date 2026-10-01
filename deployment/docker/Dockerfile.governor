@@ -35,6 +35,8 @@ COPY --chown=governor:governor gateway ./gateway
 COPY --chown=governor:governor policies ./policies
 COPY --chown=governor:governor demo ./demo
 
+RUN mkdir -p /app/data && chown -R governor:governor /app
+
 USER governor
 
 EXPOSE 8000
