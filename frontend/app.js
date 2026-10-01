@@ -167,11 +167,12 @@ async function loadActiveProject() {
     currentProject = data;
 
     const nameEl = document.getElementById("active-project-name");
-    const sbNameEl = document.getElementById("sb-project-name");
+    const pathStatusEl = document.getElementById("active-file-path-status");
     if (nameEl) nameEl.textContent = data.name || "workspace";
-    if (sbNameEl) sbNameEl.textContent = `📂 ${data.name || "workspace"}`;
+    if (pathStatusEl) pathStatusEl.textContent = `📁 ${data.name || "workspace"}`;
 
-    renderRecentProjectsList(data.recentProjects || []);
+    const recents = data.recentProjects || [];
+    renderRecentProjectsList(recents);
   } catch (err) {
     console.error("Failed to load project metadata", err);
   }
@@ -182,20 +183,22 @@ async function refreshProjectTree() {
   if (!container) return;
 
   try {
-    container.innerHTML = `<div class="tree-loading">Refreshing project files...</div>`;
+    container.innerHTML = `<div class="tree-loading">Scanning workspace...</div>`;
     const res = await fetch("/api/project/tree");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
-    if (!data.tree || data.tree.length === 0) {
+    const nodes = data.tree || data.items || [];
+    if (nodes.length === 0) {
       container.innerHTML = `<div class="sidebar-empty">Workspace is empty. Create a file with 📄+</div>`;
       return;
     }
 
     container.innerHTML = "";
-    container.appendChild(renderTreeNodeList(data.tree));
+    container.appendChild(renderTreeNodeList(nodes));
+    highlightActiveFileInTree();
   } catch (err) {
-    container.innerHTML = `<div class="sidebar-empty" style="color: #ef4444;">Failed to load tree: ${escapeHtml(err.message)}</div>`;
+    container.innerHTML = `<div class="sidebar-empty" style="color: #ff3366;">Failed to load tree: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -206,11 +209,16 @@ function renderTreeNodeList(nodes) {
   for (const node of nodes) {
     const li = document.createElement("li");
     li.className = `tree-item ${node.type}`;
+    const relPath = node.relativePath || node.path;
 
     if (node.type === "directory") {
       const header = document.createElement("div");
       header.className = "tree-node folder";
-      header.innerHTML = `<span class="folder-icon">📁</span> <span class="node-name">${escapeHtml(node.name)}</span>`;
+      header.innerHTML = `
+        <svg class="tree-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <svg class="tree-folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+        <span class="node-name">${escapeHtml(node.name)}</span>
+      `;
       
       const childrenWrapper = document.createElement("div");
       childrenWrapper.className = "folder-children";
@@ -218,24 +226,45 @@ function renderTreeNodeList(nodes) {
         childrenWrapper.appendChild(renderTreeNodeList(node.children));
       }
 
+      // Auto-expand top level or important folders
+      if (node.name === "demo" || node.name === "workspace" || node.name === "src" || node.name === "frontend") {
+        header.classList.add("expanded");
+        childrenWrapper.classList.remove("hidden");
+      } else {
+        header.classList.add("collapsed");
+        childrenWrapper.classList.add("hidden");
+      }
+
       header.addEventListener("click", () => {
-        header.classList.toggle("collapsed");
-        childrenWrapper.classList.toggle("hidden");
-        const icon = header.querySelector(".folder-icon");
-        if (icon) icon.textContent = header.classList.contains("collapsed") ? "📁" : "📂";
+        const isCollapsed = header.classList.toggle("collapsed");
+        header.classList.toggle("expanded", !isCollapsed);
+        childrenWrapper.classList.toggle("hidden", isCollapsed);
       });
 
       li.appendChild(header);
       li.appendChild(childrenWrapper);
     } else {
       const fileRow = document.createElement("div");
-      fileRow.className = `tree-node file ${activeFilePath === node.relativePath ? "active" : ""}`;
-      fileRow.dataset.path = node.relativePath;
-      const fileIcon = getFileIcon(node.extension || "");
-      fileRow.innerHTML = `<span class="file-icon">${fileIcon}</span> <span class="node-name">${escapeHtml(node.name)}</span>`;
+      const isActive = activeFilePath === relPath;
+      fileRow.className = `tree-node file ${isActive ? "active" : ""}`;
+      fileRow.dataset.path = relPath;
+      
+      const ext = ("." + (node.name.split(".").pop() || "")).toLowerCase();
+      let extBadgeClass = "ext-default";
+      if (ext === ".ts" || ext === ".tsx") extBadgeClass = "ext-ts";
+      else if (ext === ".js" || ext === ".jsx") extBadgeClass = "ext-js";
+      else if (ext === ".css") extBadgeClass = "ext-css";
+      else if (ext === ".html") extBadgeClass = "ext-html";
+      else if (ext === ".json" || ext === ".yaml" || ext === ".yml") extBadgeClass = "ext-json";
+      else if (ext === ".py") extBadgeClass = "ext-py";
+
+      fileRow.innerHTML = `
+        <svg class="tree-file-icon ${extBadgeClass}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span class="node-name">${escapeHtml(node.name)}</span>
+      `;
 
       fileRow.addEventListener("click", () => {
-        openFileByPath(node.relativePath);
+        openFileByPath(relPath);
       });
 
       li.appendChild(fileRow);
@@ -244,24 +273,6 @@ function renderTreeNodeList(nodes) {
     ul.appendChild(li);
   }
   return ul;
-}
-
-function getFileIcon(ext) {
-  const map = {
-    ".js": "📜",
-    ".ts": "🔷",
-    ".jsx": "⚛️",
-    ".tsx": "⚛️",
-    ".html": "🌐",
-    ".css": "🎨",
-    ".json": "⚙️",
-    ".md": "📝",
-    ".py": "🐍",
-    ".sql": "🗄️",
-    ".sh": "🐚",
-    ".txt": "📄",
-  };
-  return map[ext] || "📄";
 }
 
 // ============================================================
@@ -279,10 +290,10 @@ async function openFileByPath(relPath) {
 
       openFiles.set(relPath, {
         path: relPath,
-        name: data.name,
+        name: data.name || relPath.split("/").pop() || relPath,
         content: data.content,
         original: data.content,
-        language: data.language || "plaintext",
+        language: data.language || detectLanguage(relPath),
         dirty: false,
       });
     }
@@ -312,24 +323,38 @@ async function openFileByPath(relPath) {
 
     // Update UI elements
     renderEditorTabs();
-    updateActiveFileBreadcrumbs();
     highlightActiveFileInTree();
 
-    // Set Context in AI assistant
-    const contextTag = document.getElementById("ai-context-filename");
-    if (contextTag) contextTag.textContent = fileData.name;
-
     // Status bar info
-    const sbFileInfo = document.getElementById("sb-file-info");
-    if (sbFileInfo) sbFileInfo.textContent = `📄 ${fileData.name} • ${fileData.language.toUpperCase()}`;
+    const pathStatusEl = document.getElementById("active-file-path-status");
+    if (pathStatusEl) pathStatusEl.textContent = `📄 ${relPath}`;
 
   } catch (err) {
     console.error("Open file error:", err);
   }
 }
 
+function detectLanguage(filepath) {
+  const ext = filepath.split(".").pop()?.toLowerCase();
+  const map = {
+    js: "javascript",
+    mjs: "javascript",
+    ts: "typescript",
+    tsx: "typescript",
+    jsx: "javascript",
+    html: "html",
+    css: "css",
+    json: "json",
+    md: "markdown",
+    py: "python",
+    yaml: "yaml",
+    yml: "yaml",
+  };
+  return map[ext] || "plaintext";
+}
+
 function renderEditorTabs() {
-  const container = document.getElementById("editor-tabs-container");
+  const container = document.getElementById("tabs-scroll-container") || document.getElementById("editor-tabs-container");
   if (!container) return;
 
   container.innerHTML = "";
@@ -337,7 +362,6 @@ function renderEditorTabs() {
     const tab = document.createElement("div");
     tab.className = `editor-tab ${path === activeFilePath ? "active" : ""} ${file.dirty ? "dirty" : ""}`;
     tab.innerHTML = `
-      <span class="tab-icon">${getFileIcon("." + file.name.split(".").pop())}</span>
       <span class="tab-title">${escapeHtml(file.name)}</span>
       <span class="tab-dirty-indicator">●</span>
       <button class="tab-close" onclick="closeEditorTab(event, '${escapeHtml(path)}')">&times;</button>
@@ -348,6 +372,147 @@ function renderEditorTabs() {
 }
 
 function closeEditorTab(event, path) {
+  if (event) event.stopPropagation();
+  openFiles.delete(path);
+
+  if (activeFilePath === path) {
+    const remaining = Array.from(openFiles.keys());
+    if (remaining.length > 0) {
+      openFileByPath(remaining[remaining.length - 1]);
+    } else {
+      activeFilePath = null;
+      if (monacoEditor) {
+        monacoEditor.setValue("/* No file open */");
+      }
+    }
+  }
+  renderEditorTabs();
+  highlightActiveFileInTree();
+}
+
+function highlightActiveFileInTree() {
+  document.querySelectorAll(".tree-node.file").forEach((el) => {
+    if (el.dataset.path === activeFilePath) {
+      el.classList.add("active");
+    } else {
+      el.classList.remove("active");
+    }
+  });
+}
+
+// ============================================================
+// Workspace Switcher Modal & Operations
+// ============================================================
+
+function openProjectModal() {
+  const modal = document.getElementById("project-modal");
+  if (modal) {
+    modal.classList.remove("hidden");
+    fetchRecentProjects();
+  }
+}
+
+function closeProjectModal() {
+  const modal = document.getElementById("project-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
+async function fetchRecentProjects() {
+  try {
+    const res = await fetch("/api/project/recent");
+    if (!res.ok) return;
+    const data = await res.json();
+    renderRecentProjectsList(data.recent || []);
+  } catch (err) {
+    console.error("Failed to fetch recent workspaces", err);
+  }
+}
+
+function renderRecentProjectsList(projects) {
+  const container = document.getElementById("recent-projects-list");
+  if (!container) return;
+
+  if (projects.length === 0) {
+    container.innerHTML = `<div class="sidebar-empty">No other registered workspaces found.</div>`;
+    return;
+  }
+
+  let html = "";
+  for (const p of projects) {
+    const isCurrent = currentProject && currentProject.path === p;
+    const baseName = p.split("\\").pop() || p.split("/").pop() || p;
+    html += `
+      <div class="recent-project-row ${isCurrent ? 'active' : ''}" onclick="switchProjectWorkspace('${escapeHtml(p)}')">
+        <div class="row-left">
+          <svg class="svg-inline svg-accent-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+          <span class="project-basename font-bold">${escapeHtml(baseName)}</span>
+          ${isCurrent ? '<span class="pill-success" style="font-size: 0.65rem; padding: 1px 4px;">ACTIVE</span>' : ''}
+        </div>
+        <div class="project-fullpath">${escapeHtml(p)}</div>
+      </div>
+    `;
+  }
+  container.innerHTML = html;
+}
+
+async function switchProjectWorkspace(path) {
+  try {
+    const res = await fetch("/api/project/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    if (!res.ok) throw new Error("Failed to switch workspace");
+    closeProjectModal();
+    await loadActiveProject();
+    await refreshProjectTree();
+    
+    // Open default file in new workspace
+    openFileByPath("style.css").catch(() => {
+      openFileByPath("index.html").catch(() => {});
+    });
+  } catch (err) {
+    alert("Switch workspace failed: " + err.message);
+  }
+}
+
+async function promptNewFile() {
+  const filename = prompt("Enter new file path (e.g. components/Button.tsx or demo.css):");
+  if (!filename || !filename.trim()) return;
+
+  try {
+    const res = await fetch("/api/project/file/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: filename.trim(), content: "/* New file created */\n" }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || "Failed to create file");
+    }
+    await refreshProjectTree();
+    openFileByPath(filename.trim());
+  } catch (err) {
+    alert("Create file failed: " + err.message);
+  }
+}
+
+async function promptNewFolder() {
+  const foldername = prompt("Enter new folder name (e.g. src/utils):");
+  if (!foldername || !foldername.trim()) return;
+
+  try {
+    // Create placeholder inside folder to register directory
+    await fetch("/api/project/file/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: `${foldername.trim()}/.gitkeep`, content: "" }),
+    });
+    await refreshProjectTree();
+  } catch (err) {
+    alert("Create folder failed: " + err.message);
+  }
+}
   if (event) event.stopPropagation();
   openFiles.delete(path);
 

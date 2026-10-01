@@ -62,42 +62,34 @@ html, body {
 }
 
 /* ==========================================================================
-   1. IDE App Master Layout Grid
+   1. IDE App Master Layout (Antigravity Resilient Flexbox Architecture)
    ========================================================================== */
 
 .ide-app-container {
-  display: grid;
-  grid-template-columns: 52px 280px 1fr 440px;
-  grid-template-rows: 1fr 26px;
+  display: flex;
+  flex-direction: column;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
   background-color: var(--bg-app);
 }
 
-@media (max-width: 1366px) {
-  .ide-app-container {
-    grid-template-columns: 50px 240px 1fr 380px;
-  }
-}
-
-@media (max-width: 1024px) {
-  .ide-app-container {
-    grid-template-columns: 50px 1fr;
-    grid-template-rows: 1fr 1fr 26px;
-  }
-  .primary-sidebar, .right-assistant-preview {
-    grid-column: span 2;
-  }
+.ide-workspace-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
 }
 
 /* ==========================================================================
-   2. Activity Bar (Far Left 52px Ribbon)
+   2. Activity Bar (Far Left 50px Ribbon)
    ========================================================================== */
 
 .activity-bar {
-  grid-column: 1;
-  grid-row: 1;
+  width: 50px;
+  flex-shrink: 0;
   background-color: var(--bg-activity);
   border-right: 1px solid var(--border-subtle);
   display: flex;
@@ -222,13 +214,10 @@ html, body {
   box-shadow: 0 0 8px var(--color-allow);
 }
 
-/* ==========================================================================
-   3. Primary Sidebar (Tree, Search, Git, SOC)
-   ========================================================================== */
-
 .primary-sidebar {
-  grid-column: 2;
-  grid-row: 1;
+  width: 270px;
+  min-width: 220px;
+  flex-shrink: 0;
   background-color: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);
   display: flex;
@@ -335,27 +324,63 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 14px;
+  padding: 5px 12px;
   cursor: pointer;
   color: var(--text-muted);
   user-select: none;
-  font-size: 0.85rem;
-  transition: background 0.1s ease, color 0.1s ease;
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  transition: all 0.12s ease;
 }
 
 .tree-node:hover {
-  background-color: rgba(255, 255, 255, 0.04);
-  color: var(--text-main);
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
 }
 
 .tree-node.file.active {
-  background-color: rgba(56, 189, 248, 0.12);
-  color: #38bdf8;
-  font-weight: 500;
+  background-color: rgba(0, 255, 136, 0.12);
+  color: #00ff88;
+  font-weight: 600;
+  border-left: 2px solid #00ff88;
 }
 
+.tree-chevron {
+  width: 12px;
+  height: 12px;
+  color: var(--text-dim);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.tree-node.folder.expanded .tree-chevron {
+  transform: rotate(90deg);
+  color: #00ff88;
+}
+
+.tree-folder-icon {
+  width: 14px;
+  height: 14px;
+  color: #00e5ff;
+  flex-shrink: 0;
+}
+
+.tree-file-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.tree-file-icon.ext-ts { color: #38bdf8; }
+.tree-file-icon.ext-js { color: #f59e0b; }
+.tree-file-icon.ext-css { color: #00e5ff; }
+.tree-file-icon.ext-html { color: #f97316; }
+.tree-file-icon.ext-json { color: #10b981; }
+.tree-file-icon.ext-py { color: #eab308; }
+.tree-file-icon.ext-default { color: #a0a0b0; }
+
 .folder-children {
-  padding-left: 14px;
+  padding-left: 12px;
 }
 
 .folder-children.hidden {
@@ -367,6 +392,7 @@ html, body {
   text-align: center;
   color: var(--text-dim);
   font-size: 0.8rem;
+  font-family: var(--font-mono);
 }
 
 /* Search View */
@@ -598,9 +624,9 @@ html, body {
    4. Center Main Editor Area (Monaco & Terminal)
    ========================================================================== */
 
-.main-editor-area {
-  grid-column: 3;
-  grid-row: 1;
+.main-editor-area, .editor-main-area {
+  flex: 1;
+  min-width: 0;
   background-color: var(--bg-editor);
   display: flex;
   flex-direction: column;
@@ -940,8 +966,9 @@ html, body {
    ============================================================ */
 
 .right-assistant-preview {
-  grid-column: 4;
-  grid-row: 1;
+  width: 440px;
+  min-width: 320px;
+  flex-shrink: 0;
   background-color: var(--bg-sidebar);
   border-left: 1px solid var(--border-subtle);
   display: flex;
@@ -1520,97 +1547,108 @@ html, body {
   z-index: 1000;
 }
 
-.modal-card {
+.modal-dialog, .modal-card {
   background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-md);
   width: 90%;
-  max-width: 520px;
+  max-width: 540px;
   overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 30px rgba(0, 255, 136, 0.15), 0 20px 40px rgba(0, 0, 0, 0.8);
 }
 
 .modal-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
+  justify-content: space-between;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--border-subtle);
-  background-color: rgba(0, 0, 0, 0.15);
-}
-
-.modal-header-icon {
-  font-size: 1.4rem;
+  background-color: rgba(0, 0, 0, 0.3);
 }
 
 .modal-header h3 {
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   font-weight: 700;
+  font-family: var(--font-mono);
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.modal-sub {
-  font-size: 0.75rem;
-  color: var(--text-dim);
-}
-
-.modal-close {
-  margin-left: auto;
+.modal-close-btn, .modal-close {
   background: transparent;
   border: none;
   color: var(--text-dim);
-  font-size: 1.4rem;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
 }
 
-.modal-close:hover {
-  color: var(--text-main);
+.modal-close-btn:hover, .modal-close:hover {
+  color: #ff3366;
 }
 
 .modal-body {
   padding: 16px 18px;
-  font-size: 0.85rem;
-}
-
-.ide-input {
-  background-color: var(--bg-input);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  color: var(--text-main);
-  font-family: var(--font-mono);
   font-size: 0.82rem;
-  outline: none;
 }
 
-.ide-input:focus {
-  border-color: var(--accent-primary);
+.modal-hint {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  margin-bottom: 10px;
 }
 
 .recent-projects-list {
-  margin-top: 6px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 140px;
+  gap: 6px;
+  max-height: 260px;
   overflow-y: auto;
 }
 
 .recent-project-row {
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: #0d0d14;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xs);
-  padding: 6px 10px;
-  font-size: 0.78rem;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
   cursor: pointer;
   transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .recent-project-row:hover {
-  background-color: var(--bg-card-hover);
+  background-color: #161622;
   border-color: var(--accent-primary);
-  color: var(--text-main);
+}
+
+.recent-project-row.active {
+  border-color: var(--accent-primary);
+  background-color: rgba(0, 255, 136, 0.08);
+}
+
+.recent-project-row .row-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-basename {
+  font-size: 0.85rem;
+  font-family: var(--font-mono);
+  color: #ffffff;
+}
+
+.project-fullpath {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  padding-left: 21px;
 }
 
 .modal-footer {
