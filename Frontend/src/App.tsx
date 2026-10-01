@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { TopBar } from './components/showcase/TopBar';
 import { HeroSection } from './components/showcase/HeroSection';
+import { WorkspaceStudioSection } from './components/studio/WorkspaceStudioSection';
 import { PlaygroundSection } from './components/showcase/PlaygroundSection';
 import { CyberTerminal } from './components/cyber/CyberTerminal';
 import { SprawlConsoleSection } from './components/showcase/SprawlConsoleSection';
@@ -103,6 +104,9 @@ export default function App() {
             onIntensityChange={setNeonIntensity}
           />
         </div>
+
+        {/* AI Workspace Studio & Live IDE (Open Folder, File Explorer, Prompt Console, Hot-Reload Preview) */}
+        <WorkspaceStudioSection />
 
         {/* Human-in-the-Loop Reviewer Approval Queue */}
         <SprawlConsoleSection />

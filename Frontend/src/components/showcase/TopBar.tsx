@@ -43,8 +43,9 @@ export const TopBar: React.FC<TopBarProps> = ({
         </a>
 
         {/* Zone 2: Clean text navigation links */}
-        <nav className="hidden lg:flex items-center gap-6 text-xs font-mono tracking-widest uppercase">
+        <nav className="hidden lg:flex items-center gap-5 text-xs font-mono tracking-widest uppercase">
           {[
+            { id: 'studio', label: '💻 Workspace IDE' },
             { id: 'approvals', label: 'Approvals', badge: pendingApprovalsCount },
             { id: 'matrix', label: 'Policy Matrix' },
             { id: 'audit', label: 'Audit Chain' },
