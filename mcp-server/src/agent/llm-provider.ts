@@ -339,9 +339,25 @@ The system is built on an enterprise **multi-tier zero-trust development archite
       };
     }
 
-    // 8. Run Test & Commands
+    // 8. Run Test & Commands (only for explicit command execution requests)
     if (
-      (lower.includes("run") || lower.includes("test") || lower.includes("pytest") || lower.includes("npm") || lower.includes("git")) &&
+      (
+        lower.startsWith("run test") ||
+        lower.startsWith("run the test") ||
+        lower.startsWith("npm test") ||
+        lower.startsWith("pytest") ||
+        lower.startsWith("git ") ||
+        lower.startsWith("exec ") ||
+        lower.startsWith("execute ") ||
+        lower.includes("run all tests") ||
+        lower.includes("run tests") ||
+        lower.includes("run git status") ||
+        lower.includes("check git status")
+      ) &&
+      !lower.startsWith("give me") &&
+      !lower.startsWith("show me") &&
+      !lower.startsWith("why") &&
+      !lower.startsWith("create") &&
       toolNames.includes("run_project_command")
     ) {
       let cmd = "git";

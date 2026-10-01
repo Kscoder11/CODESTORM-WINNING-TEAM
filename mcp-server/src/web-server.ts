@@ -839,16 +839,83 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     // 14. POST /api/terminal/exec — Controlled terminal command execution
     if (method === "POST" && pathname === "/api/terminal/exec") {
       const body = await parseJsonBody(req);
-      const command = String(body.command || "").trim();
+      let command = String(body.command || "").trim();
 
       if (!command) {
         sendJson(res, 400, { error: "empty_command" });
         return;
       }
 
-      log("info", "Terminal command initiated", { command, cwd: activeProjectRoot });
+      // Handle common git typos
+      if (/^git\s+(staus|stauts|satuts|stat|stats|st)$/i.test(command)) {
+        command = "git status";
+      } else if (/^(staus|stauts|satuts)$/i.test(command)) {
+        command = "git status";
+      } else if (/^git\s+(cmomit|comit|comitt)\b/i.test(command)) {
+        command = command.replace(/^git\s+(cmomit|comit|comitt)\b/i, "git commit");
+      } else if (/^git\s+(brnach|brabch)\b/i.test(command)) {
+        command = command.replace(/^git\s+(brnach|brabch)\b/i, "git branch");
+      } else if (/^git\s+(chekcous|checout|checkotu)\b/i.test(command)) {
+        command = command.replace(/^git\s+(chekcous|checout|checkotu)\b/i, "git checkout");
+      } else if (/^git\s+(psuh|puhs)\b/i.test(command)) {
+        command = command.replace(/^git\s+(psuh|puhs)\b/i, "git push");
+      } else if (/^git\s+(pul|plul)\b/i.test(command)) {
+        command = command.replace(/^git\s+(pul|plul)\b/i, "git pull");
+      } else if (/^git\s+(dfif|dif)\b/i.test(command)) {
+        command = command.replace(/^git\s+(dfif|dif)\b/i, "git diff");
+      } else if (/^git\s+(lod|lg)$/i.test(command)) {
+        command = "git log --oneline -n 10";
+      }
 
-      exec(command, { cwd: activeProjectRoot, timeout: 15000 }, (err, stdout, stderr) => {
+      const lowerCmd = command.toLowerCase();
+
+      // Built-in commands
+      if (lowerCmd === "pwd" || lowerCmd === "cwd") {
+        sendJson(res, 200, { command, stdout: activeProjectRoot + "\n", stderr: "", exitCode: 0 });
+        return;
+      }
+      if (lowerCmd === "clear" || lowerCmd === "cls") {
+        sendJson(res, 200, { command, stdout: "", stderr: "", exitCode: 0, clear: true });
+        return;
+      }
+      if (lowerCmd === "whoami") {
+        sendJson(res, 200, { command, stdout: "security-operator (PNG5 NOMOS Zero-Trust Active Session)\n", stderr: "", exitCode: 0 });
+        return;
+      }
+      if (lowerCmd === "help") {
+        const helpText = `PNG5 Governed AI Local IDE — Terminal Help
+=====================================================
+Supported Allowlisted Commands:
+  git status          View git branch and modified files
+  git diff            Inspect uncommitted changes
+  git log -n 5        View recent commit history
+  npm test            Run project test suite
+  node -v / npm -v    Check runtime versions
+  ls / dir            List workspace directory contents
+  cat <file>          Display file contents
+  pwd                 Print current working directory path
+  clear / cls         Clear terminal screen
+  help                Display this command reference
+=====================================================
+`;
+        sendJson(res, 200, { command, stdout: helpText, stderr: "", exitCode: 0 });
+        return;
+      }
+
+      // Windows-friendly aliases for basic shell utilities
+      let execCmd = command;
+      if (process.platform === "win32") {
+        if (/^ls(\s+.*)?$/i.test(command)) {
+          execCmd = "powershell -NoProfile -Command ls";
+        } else if (/^cat\s+(.+)$/i.test(command)) {
+          const target = command.replace(/^cat\s+/i, "").trim();
+          execCmd = `type "${target.replace(/"/g, "")}"`;
+        }
+      }
+
+      log("info", "Terminal command initiated", { command, execCmd, cwd: activeProjectRoot });
+
+      exec(execCmd, { cwd: activeProjectRoot, timeout: 15000 }, (err, stdout, stderr) => {
         sendJson(res, 200, {
           command,
           stdout: stdout || "",

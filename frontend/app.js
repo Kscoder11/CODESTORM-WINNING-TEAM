@@ -897,13 +897,60 @@ function handleTerminalKeyDown(event) {
 }
 
 async function executeTerminalCommand(command) {
+  const trimmed = String(command || "").trim();
+  const lower = trimmed.toLowerCase();
+
+  // Instant client-side built-in commands
+  if (lower === "clear" || lower === "cls") {
+    clearTerminalOutput();
+    return;
+  }
+
+  if (lower === "help") {
+    appendTerminalOutput(
+      `PNG5 Governed AI Local IDE — Terminal Help\n` +
+      `───────────────────────────────────────────────────\n` +
+      `Supported Commands:\n` +
+      `  • git status          View git branch and modified files\n` +
+      `  • git diff            Inspect uncommitted changes\n` +
+      `  • git log -n 5        View recent commit history\n` +
+      `  • npm test            Run workspace test suite\n` +
+      `  • node -v / npm -v    Check runtime versions\n` +
+      `  • ls / dir            List workspace directory contents\n` +
+      `  • cat <file>          Display file contents\n` +
+      `  • pwd                 Print current working directory path\n` +
+      `  • clear / cls         Clear terminal screen\n` +
+      `  • help                Display this command reference\n` +
+      `───────────────────────────────────────────────────`,
+      "system"
+    );
+    return;
+  }
+
+  // Client-side smart auto-correction with visual notification
+  let targetCmd = trimmed;
+  if (/^git\s+(staus|stauts|satuts|stat|stats|st)$/i.test(trimmed)) {
+    targetCmd = "git status";
+    appendTerminalOutput(`ℹ️ Auto-corrected: '${trimmed}' → 'git status'`, "system");
+  } else if (/^(staus|stauts|satuts)$/i.test(trimmed)) {
+    targetCmd = "git status";
+    appendTerminalOutput(`ℹ️ Auto-corrected: '${trimmed}' → 'git status'`, "system");
+  } else if (/^git\s+(cmomit|comit|comitt)\b/i.test(trimmed)) {
+    targetCmd = trimmed.replace(/^git\s+(cmomit|comit|comitt)\b/i, "git commit");
+    appendTerminalOutput(`ℹ️ Auto-corrected: '${trimmed}' → '${targetCmd}'`, "system");
+  }
+
   try {
     const res = await fetch("/api/terminal/exec", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command }),
+      body: JSON.stringify({ command: targetCmd }),
     });
     const data = await res.json();
+    if (data.clear) {
+      clearTerminalOutput();
+      return;
+    }
     if (data.stdout) appendTerminalOutput(data.stdout, "stdout");
     if (data.stderr) appendTerminalOutput(data.stderr, "stderr");
     if (data.exitCode !== 0 && data.exitCode !== undefined) {
