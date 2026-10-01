@@ -1,0 +1,24 @@
+# ==============================================================================
+# PNG5 NOMOS — Standalone Frontend Production Web Surface
+# ==============================================================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+# Production Nginx distribution
+FROM nginx:alpine AS runner
+
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+HEALTHCHECK --interval=20s --timeout=5s --retries=3 \
+  CMD wget --spider http://localhost:80/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

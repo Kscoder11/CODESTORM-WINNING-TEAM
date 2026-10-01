@@ -1,12 +1,52 @@
-governor.db
-governor.db-shm
-governor.db-wal
-__pycache__/
-*.pyc
-.pytest_cache/
+# Environment and Secret Files
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.cert
+credentials.json
 
-# MCP Server
-mcp-server/node_modules/
+# SQLite Database & Write-Ahead Logs
+*.db
+*.db-shm
+*.db-wal
+governor.db*
+demo/*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+
+# Node.js / JavaScript / TypeScript
+node_modules/
+dist/
+build/
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# MCP Server Workspace Artifacts
 mcp-server/dist/
 mcp-server/__test_workspace__/
-node_modules
+
+# Frontend
+frontend/dist/
+frontend/.vite/
+
+# OS / Editor Files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
