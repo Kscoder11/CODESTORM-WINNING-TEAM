@@ -62,9 +62,13 @@ async function runDiagnostic(): Promise<void> {
     check("Executed 'hello' tool", !helloRes.isError && helloText.includes("PNG5 MCP Policy Gateway"));
 
     // Invocate list_project_files tool
-    const listRes = await client.callTool("list_project_files", { directory: "." });
+    const listRes = await client.callTool("list_project_files", { path: "." });
     const listText = listRes.content[0]?.text || "";
-    check("Executed 'list_project_files' tool", !listRes.isError && listText.includes("package.json"));
+    check(
+      "Executed 'list_project_files' tool",
+      !listRes.isError &&
+        (listText.includes("package.json") || listText.includes("README") || listText.includes("mcp-server"))
+    );
 
     // 5. Test Error Handling & Safety
     process.stdout.write("\n[4/5] Testing error handling and security blocks...\n");

@@ -126,6 +126,9 @@
             </div>
           </div>
           <div class="tree-actions">
+            <button class="icon-tool-btn" title="Open Folder / Select Local Drive (Ctrl+O)" onclick="openProjectModal()">
+              <svg class="svg-tool" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+            </button>
             <button class="icon-tool-btn" title="New File" onclick="promptNewFile()">
               <svg class="svg-tool" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
             </button>
@@ -400,19 +403,76 @@
   </div>
 
   <!-- Open Project / Workspace Modal -->
-  <div class="modal-overlay hidden" id="project-modal">
-    <div class="modal-dialog">
+  <div class="modal-overlay hidden" id="project-modal" onclick="handleModalOverlayClick(event)">
+    <div class="modal-dialog modal-dialog-lg" onclick="event.stopPropagation()">
       <div class="modal-header">
-        <h3>Open Project Workspace</h3>
-        <button class="modal-close-btn" onclick="closeProjectModal()">
+        <div class="modal-header-title">
+          <svg class="svg-inline svg-accent-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path>
+          </svg>
+          <h3>Open Folder & Workspace</h3>
+        </div>
+        <button class="modal-close-btn" onclick="closeProjectModal()" title="Close (Esc)">
           <svg class="svg-tool" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
       <div class="modal-body">
-        <p class="modal-hint">Select a registered workspace root from the list below:</p>
-        <div class="recent-projects-list" id="recent-projects-list">
-          <!-- Populated dynamically via app.js -->
+        
+        <!-- Drive & Root Shortcuts Row -->
+        <div class="drive-shortcuts-container">
+          <span class="section-micro-label">SELECT LOCAL DRIVE OR ROOT:</span>
+          <div class="drive-chips-row" id="system-drives-list">
+            <div class="drive-chip-loading">Detecting local drives...</div>
+          </div>
         </div>
+
+        <!-- Custom Path Bar & Native OS Picker -->
+        <div class="folder-path-input-group">
+          <div class="path-input-wrapper">
+            <button class="btn-dir-up" id="btn-browse-parent" onclick="navigateDirectoryParent()" title="Parent Directory (Up)">
+              <svg class="svg-tool" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+            </button>
+            <input type="text" id="modal-custom-path-input" placeholder="Enter or paste folder path (e.g. D:\Projects\App or C:\Users\...)" onkeydown="handlePathInputKeyDown(event)" />
+            <button class="btn-path-go" onclick="submitCustomPath()" title="Navigate to Path">
+              <span>Go</span>
+              <svg class="svg-tool" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+          <button class="btn-native-picker" onclick="triggerNativeFolderPicker()" title="Choose folder with OS File Dialog">
+            <svg class="svg-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span>OS Dialog</span>
+          </button>
+          <input type="file" id="local-drive-folder-picker" webkitdirectory directory style="display: none;" onchange="handleNativeFolderSelected(event)" />
+        </div>
+
+        <!-- Visual Subdirectory Explorer Card -->
+        <div class="modal-section-card">
+          <div class="modal-section-header">
+            <div class="modal-sec-title">
+              <span class="section-micro-label">EXPLORE SUBFOLDERS:</span>
+              <span class="browse-dir-current-name" id="browse-current-basename">workspace</span>
+            </div>
+            <span class="browse-dir-count-badge" id="browse-dir-count">0 folders</span>
+          </div>
+          <div class="modal-dir-navigator" id="modal-dir-navigator">
+            <div class="tree-loading">Loading directories...</div>
+          </div>
+          <div class="modal-action-bar">
+            <button class="btn-primary-emerald" id="btn-open-selected-folder" onclick="openCurrentBrowsedFolder()">
+              <svg class="svg-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              <span>Open This Workspace</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Recent Projects Section -->
+        <div class="recent-projects-section">
+          <span class="section-micro-label">RECENT WORKSPACES:</span>
+          <div class="recent-projects-list" id="recent-projects-list">
+            <!-- Populated dynamically via app.js -->
+          </div>
+        </div>
+
       </div>
     </div>
   </div>

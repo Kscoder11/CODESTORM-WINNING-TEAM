@@ -18,8 +18,9 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from "http";
-import { resolve, extname, relative, join, basename, dirname } from "path";
+import { resolve, extname, relative, join, basename, dirname, isAbsolute, normalize } from "path";
 import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, unlinkSync, renameSync, mkdirSync } from "fs";
+import { homedir } from "os";
 import { createHash, randomUUID } from "crypto";
 import { exec, execFile, ChildProcess } from "child_process";
 import { config, log } from "./config.js";
@@ -60,6 +61,128 @@ export const REPO_ROOT = findRepoRoot();
 
 // Active Workspace Root (Defaults to the entire repository workspace)
 let activeProjectRoot = REPO_ROOT;
+
+/**
+ * Safely verify if a target path is contained within the root directory.
+ */
+export function isWithinRoot(target: string, root: string): boolean {
+  const normTarget = resolve(target).toLowerCase();
+  const normRoot = resolve(root).toLowerCase();
+  if (normTarget === normRoot) return true;
+  const rel = relative(normRoot, normTarget);
+  return !rel.startsWith("..") && !normTarget.startsWith("\\\\") && !normTarget.startsWith("//");
+}
+
+/**
+ * Detect available system drive roots and standard user locations for local drive browsing.
+ */
+export function getSystemDrives(): Array<{ label: string; path: string; type: string }> {
+  const drives: Array<{ label: string; path: string; type: string }> = [];
+
+  // 1. Current Project Workspace Root
+  if (existsSync(REPO_ROOT)) {
+    const repoName = basename(REPO_ROOT) === "app" ? "CODESTORM-WINNING-TEAM" : basename(REPO_ROOT);
+    drives.push({ label: `Root (${repoName})`, path: REPO_ROOT, type: "repo" });
+  }
+
+  // 2. Sub-modules / standard workspaces
+  const commonFolders = ["frontend", "governor", "mcp-server", "policies", "demo"];
+  for (const folder of commonFolders) {
+    const subPath = resolve(REPO_ROOT, folder);
+    if (existsSync(subPath)) {
+      drives.push({ label: `${folder}/`, path: subPath, type: "workspace" });
+    }
+  }
+
+  // 3. System Drive Letters (Windows host)
+  if (process.platform === "win32") {
+    const letters = ["C", "D", "E", "F", "G", "H", "Z"];
+    for (const letter of letters) {
+      const drivePath = `${letter}:\\`;
+      try {
+        if (existsSync(drivePath)) {
+          drives.push({ label: `Local Drive (${letter}:)`, path: drivePath, type: "drive" });
+        }
+      } catch {}
+    }
+  } else {
+    // Linux / Unix / Container Roots
+    drives.push({ label: "Root (/)", path: "/", type: "drive" });
+    if (existsSync("/workspace")) {
+      drives.push({ label: "Workspace (/workspace)", path: "/workspace", type: "workspace" });
+    }
+  }
+
+  // 4. User Home Directory
+  try {
+    const userHome = homedir();
+    if (existsSync(userHome) && userHome !== "/root" && userHome !== "/home/png5") {
+      drives.push({ label: "User Home (~)", path: userHome, type: "home" });
+    }
+  } catch {}
+
+  return drives;
+}
+
+/**
+ * Safely browse subdirectories inside a given path for the interactive directory navigator.
+ */
+export function browseDirectory(dirPath: string): {
+  current: string;
+  parent: string | null;
+  directories: Array<{ name: string; path: string }>;
+  canOpen: boolean;
+} {
+  let target = resolve(dirPath);
+  const norm = dirPath ? dirPath.replace(/\\/g, "/") : "";
+
+  if (
+    norm.toLowerCase() === "codestorm-winning-team" ||
+    norm === "/app/CODESTORM-WINNING-TEAM" ||
+    norm === "/app/codestorm-winning-team" ||
+    norm.endsWith("/CODESTORM-WINNING-TEAM") ||
+    !existsSync(target) ||
+    !statSync(target).isDirectory()
+  ) {
+    target = existsSync(target) && statSync(target).isDirectory() ? target : REPO_ROOT;
+  }
+
+  const parent = dirname(target) !== target ? dirname(target) : null;
+  const directories: Array<{ name: string; path: string }> = [];
+
+  try {
+    const entries = readdirSync(target, { withFileTypes: true });
+    for (const entry of entries) {
+      // Filter hidden/system directories
+      if (
+        entry.name.startsWith("$") ||
+        entry.name === "System Volume Information" ||
+        entry.name === "$RECYCLE.BIN" ||
+        entry.name === "Recovery"
+      ) {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        directories.push({
+          name: entry.name,
+          path: join(target, entry.name),
+        });
+      }
+    }
+  } catch (err) {
+    // Gracefully handle permission errors
+  }
+
+  // Sort directories alphabetically (case-insensitive)
+  directories.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+
+  return {
+    current: target,
+    parent,
+    directories,
+    canOpen: true,
+  };
+}
 
 /**
  * Ensure the active workspace is initialized with Git so all source control features work seamlessly.
@@ -470,6 +593,21 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     // IDE Project & File Management APIs
     // ============================================================
 
+    // 0a. GET /api/fs/drives — List available system drive roots and standard user locations
+    if (method === "GET" && pathname === "/api/fs/drives") {
+      const drives = getSystemDrives();
+      sendJson(res, 200, { drives });
+      return;
+    }
+
+    // 0b. GET /api/fs/browse — Browse subdirectories for folder picker navigator
+    if (method === "GET" && pathname === "/api/fs/browse") {
+      const targetPath = url.searchParams.get("path") || activeProjectRoot;
+      const result = browseDirectory(targetPath);
+      sendJson(res, 200, result);
+      return;
+    }
+
     // 1. GET /api/project — Active project metadata
     if (method === "GET" && pathname === "/api/project") {
       const framework = detectFramework(activeProjectRoot);
@@ -484,7 +622,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       countFiles(tree);
 
       sendJson(res, 200, {
-        name: basename(activeProjectRoot),
+        name: basename(activeProjectRoot) || activeProjectRoot,
         path: activeProjectRoot,
         framework,
         totalFiles: count,
@@ -494,13 +632,42 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       return;
     }
 
-    // 2. POST /api/project/open — Switch active project directory
+    // 2. POST /api/project/open — Switch active project directory (Local Drive or Workspace)
     if (method === "POST" && pathname === "/api/project/open") {
       const body = await parseJsonBody(req);
       let rawPath = String(body.path || "").trim();
+      const normalized = rawPath.replace(/\\/g, "/");
 
-      if (!rawPath || rawPath.toLowerCase() === "root" || rawPath.toLowerCase() === "entire" || rawPath.toLowerCase() === "all" || rawPath.toLowerCase() === "workspace") {
+      if (
+        !rawPath ||
+        rawPath.toLowerCase() === "root" ||
+        rawPath.toLowerCase() === "entire" ||
+        rawPath.toLowerCase() === "all" ||
+        rawPath.toLowerCase() === "workspace" ||
+        rawPath.toLowerCase() === "codestorm-winning-team" ||
+        rawPath.toLowerCase() === "app" ||
+        normalized === "/app" ||
+        normalized === "/app/CODESTORM-WINNING-TEAM" ||
+        normalized === "/app/codestorm-winning-team" ||
+        normalized.endsWith("/CODESTORM-WINNING-TEAM") ||
+        normalized.endsWith("/CODESTORM-WINNING-TEAM/")
+      ) {
         rawPath = REPO_ROOT;
+      }
+
+      // Handle user home directory alias ~
+      if (rawPath.startsWith("~")) {
+        rawPath = join(homedir(), rawPath.slice(1));
+      }
+
+      // If Windows path like D:\CODESTORM-WINNING-TEAM\frontend sent to Linux container
+      if (normalized.includes("CODESTORM-WINNING-TEAM/")) {
+        const sub = normalized.split("CODESTORM-WINNING-TEAM/")[1];
+        if (sub && existsSync(resolve(REPO_ROOT, sub))) {
+          rawPath = resolve(REPO_ROOT, sub);
+        } else if (!existsSync(resolve(rawPath))) {
+          rawPath = REPO_ROOT;
+        }
       }
 
       // Try multiple resolution paths
@@ -514,26 +681,36 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
       let targetPath = candidates.find((p) => existsSync(p) && statSync(p).isDirectory());
 
+      // If still not found and rawPath looks like current root directory name
+      if (!targetPath && (rawPath.toLowerCase().includes("codestorm") || rawPath.toLowerCase().includes("workspace") || rawPath.toLowerCase().includes("app"))) {
+        targetPath = REPO_ROOT;
+      }
+
       if (!targetPath) {
-        sendJson(res, 400, { error: "invalid_directory", message: `Path does not exist: ${rawPath}` });
+        sendJson(res, 400, { error: "invalid_directory", message: `Directory does not exist: ${rawPath}` });
         return;
       }
 
       activeProjectRoot = targetPath;
-      if (!recentProjects.includes(targetPath)) {
-        recentProjects.unshift(targetPath);
-        if (recentProjects.length > 8) recentProjects.pop();
-      }
+      ensureGitRepository(activeProjectRoot);
+
+      // Keep recent projects unique & capped
+      const idx = recentProjects.indexOf(targetPath);
+      if (idx !== -1) recentProjects.splice(idx, 1);
+      recentProjects.unshift(targetPath);
+      if (recentProjects.length > 12) recentProjects.pop();
 
       devServerState.framework = detectFramework(activeProjectRoot);
       devServerState.logs.push(`Switched project workspace to: ${activeProjectRoot}`);
 
       broadcastSSE("project_changed", { path: activeProjectRoot, framework: devServerState.framework });
 
+      const displayName = (basename(activeProjectRoot) === "app" ? "CODESTORM-WINNING-TEAM" : basename(activeProjectRoot)) || activeProjectRoot;
+
       sendJson(res, 200, {
         success: true,
         project: {
-          name: basename(activeProjectRoot),
+          name: displayName,
           path: activeProjectRoot,
           framework: devServerState.framework,
         },
@@ -546,7 +723,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       const tree = buildFileTree(activeProjectRoot);
       sendJson(res, 200, {
         root: activeProjectRoot,
-        name: basename(activeProjectRoot),
+        name: basename(activeProjectRoot) || activeProjectRoot,
         tree,
       });
       return;
@@ -591,7 +768,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       const target = resolve(activeProjectRoot, rel);
 
       // Workspace containment check
-      if (!target.startsWith(activeProjectRoot)) {
+      if (!isWithinRoot(target, activeProjectRoot)) {
         sendJson(res, 403, { error: "path_traversal", message: "Cannot read files outside active project root" });
         return;
       }
@@ -638,7 +815,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       const content = String(body.content !== undefined ? body.content : "");
       const target = resolve(activeProjectRoot, rel);
 
-      if (!target.startsWith(activeProjectRoot)) {
+      if (!isWithinRoot(target, activeProjectRoot)) {
         sendJson(res, 403, { error: "path_traversal", message: "Cannot write outside active project root" });
         return;
       }
@@ -664,7 +841,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       const isDir = Boolean(body.isDirectory);
       const target = resolve(activeProjectRoot, rel);
 
-      if (!target.startsWith(activeProjectRoot)) {
+      if (!isWithinRoot(target, activeProjectRoot)) {
         sendJson(res, 403, { error: "path_traversal", message: "Cannot create outside project root" });
         return;
       }
@@ -689,7 +866,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       const rel = String(body.path || "");
       const target = resolve(activeProjectRoot, rel);
 
-      if (!target.startsWith(activeProjectRoot)) {
+      if (!isWithinRoot(target, activeProjectRoot)) {
         sendJson(res, 403, { error: "path_traversal", message: "Cannot delete outside project root" });
         return;
       }
@@ -810,7 +987,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       const target = resolve(activeProjectRoot, rel);
       const original = fileSnapshots.get(rel);
 
-      if (original !== undefined && target.startsWith(activeProjectRoot)) {
+      if (original !== undefined && isWithinRoot(target, activeProjectRoot)) {
         writeFileSync(target, original, "utf-8");
         broadcastSSE("file_saved", { path: rel, action: "restored" });
         sendJson(res, 200, { success: true, restored: true, path: rel });
@@ -1151,7 +1328,7 @@ Supported Allowlisted Commands:
       const previewRel = pathname.replace(/^\/preview\//, "") || "index.html";
       let resolvedPreviewPath = resolve(activeProjectRoot, previewRel);
 
-      if (!resolvedPreviewPath.startsWith(activeProjectRoot)) {
+      if (!isWithinRoot(resolvedPreviewPath, activeProjectRoot)) {
         res.writeHead(403, { "Content-Type": "text/plain" });
         res.end("Forbidden");
         return;
@@ -1231,6 +1408,9 @@ Supported Allowlisted Commands:
         const distIndex = resolve(FRONTEND_DIR, "dist", "index.html");
         resolvedPath = existsSync(distIndex) ? distIndex : resolve(FRONTEND_DIR, "cyber.html");
         if (!existsSync(resolvedPath)) {
+          resolvedPath = resolve(FRONTEND_DIR, "ide.html");
+        }
+        if (!existsSync(resolvedPath)) {
           resolvedPath = resolve(FRONTEND_DIR, "index.html");
         }
       } else if (pathname === "/ide" || pathname === "/app") {
@@ -1238,7 +1418,7 @@ Supported Allowlisted Commands:
         resolvedPath = existsSync(idePath) ? idePath : resolve(FRONTEND_DIR, "index.html");
       } else if (pathname === "/landing") {
         const landingPath = resolve(FRONTEND_DIR, "landing.html");
-        resolvedPath = existsSync(landingPath) ? landingPath : resolve(FRONTEND_DIR, "index.html");
+        resolvedPath = existsSync(landingPath) ? landingPath : resolve(FRONTEND_DIR, "ide.html");
       } else if (pathname === "/presentation" || pathname === "/pitch" || pathname === "/judge" || pathname === "/demo") {
         const presPath = resolve(FRONTEND_DIR, "presentation.html");
         resolvedPath = existsSync(presPath) ? presPath : resolve(FRONTEND_DIR, "landing.html");
@@ -1268,9 +1448,14 @@ Supported Allowlisted Commands:
         return;
       }
 
-      // Fallback to dist/index.html or index.html
+      // Fallback to dist/index.html, ide.html or index.html
       const distFallback = resolve(FRONTEND_DIR, "dist", "index.html");
-      const fallbackPath = existsSync(distFallback) ? distFallback : resolve(FRONTEND_DIR, "index.html");
+      const ideFallback = resolve(FRONTEND_DIR, "ide.html");
+      const fallbackPath = existsSync(distFallback)
+        ? distFallback
+        : existsSync(ideFallback)
+        ? ideFallback
+        : resolve(FRONTEND_DIR, "index.html");
       if (existsSync(fallbackPath)) {
         const content = readFileSync(fallbackPath);
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });

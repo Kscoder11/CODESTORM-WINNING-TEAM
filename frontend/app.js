@@ -544,20 +544,243 @@ function toggleSplitPreview() {
 }
 
 // ============================================================
-// 5. Workspace Switcher Modal
+// 5. Workspace Switcher & Local Drive Folder Selector
 // ============================================================
 
-function openProjectModal() {
+let currentBrowsedPath = "";
+let currentParentPath = null;
+
+function handleModalOverlayClick(event) {
+  if (event.target && event.target.id === "project-modal") {
+    closeProjectModal();
+  }
+}
+
+function openProjectModal(initialPath) {
   const modal = document.getElementById("project-modal");
   if (modal) {
     modal.classList.remove("hidden");
+    fetchSystemDrives();
     fetchRecentProjects();
+    const target = initialPath || (currentProject && currentProject.path ? currentProject.path : "");
+    browseDirectory(target);
   }
 }
 
 function closeProjectModal() {
   const modal = document.getElementById("project-modal");
   if (modal) modal.classList.add("hidden");
+}
+
+async function fetchSystemDrives() {
+  const container = document.getElementById("system-drives-list");
+  if (!container) return;
+
+  try {
+    const res = await fetch("/api/fs/drives");
+    if (!res.ok) throw new Error("Failed to load drives");
+    const data = await res.json();
+    const drives = data.drives || [];
+
+    if (drives.length === 0) {
+      container.innerHTML = `<span class="drive-chip-loading">No external drives detected.</span>`;
+      return;
+    }
+
+    let html = "";
+    for (const d of drives) {
+      const isDrive = d.type === "drive";
+      const icon = isDrive
+        ? `<svg class="svg-inline svg-accent-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 18h.01"/><path d="M10 18h.01"/><path d="M4 14V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8"/></svg>`
+        : `<svg class="svg-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`;
+      html += `
+        <button class="drive-chip" data-path="${escapeHtml(d.path)}" onclick="browseDirectory('${escapeHtml(d.path.replace(/\\/g, '\\\\'))}')" title="${escapeHtml(d.path)}">
+          ${icon}
+          <span>${escapeHtml(d.label)}</span>
+        </button>
+      `;
+    }
+    container.innerHTML = html;
+  } catch (err) {
+    console.error("Failed to fetch system drives", err);
+    container.innerHTML = `<span class="drive-chip-loading">Unable to detect drive roots.</span>`;
+  }
+}
+
+async function browseDirectory(targetPath) {
+  const navContainer = document.getElementById("modal-dir-navigator");
+  const pathInput = document.getElementById("modal-custom-path-input");
+  const basenameLabel = document.getElementById("browse-current-basename");
+  const countBadge = document.getElementById("browse-dir-count");
+  const btnParent = document.getElementById("btn-browse-parent");
+
+  if (navContainer) {
+    navContainer.innerHTML = `<div class="tree-loading">Loading directories...</div>`;
+  }
+
+  try {
+    const url = targetPath ? `/api/fs/browse?path=${encodeURIComponent(targetPath)}` : "/api/fs/browse";
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || "Directory unreadable");
+    }
+
+    const data = await res.json();
+    currentBrowsedPath = data.current || targetPath || "";
+    currentParentPath = data.parent;
+
+    if (pathInput) pathInput.value = currentBrowsedPath;
+    if (basenameLabel) {
+      const base = currentBrowsedPath.split("\\").pop() || currentBrowsedPath.split("/").pop() || currentBrowsedPath;
+      basenameLabel.textContent = base;
+      basenameLabel.title = currentBrowsedPath;
+    }
+    if (countBadge) {
+      const count = (data.directories || []).length;
+      countBadge.textContent = `${count} ${count === 1 ? 'folder' : 'folders'}`;
+    }
+
+    if (btnParent) {
+      btnParent.disabled = !currentParentPath;
+      btnParent.style.opacity = currentParentPath ? "1" : "0.3";
+      btnParent.style.cursor = currentParentPath ? "pointer" : "default";
+    }
+
+    // Highlight active drive chip if applicable
+    document.querySelectorAll(".drive-chip").forEach((chip) => {
+      const chipPath = chip.getAttribute("data-path");
+      if (chipPath && currentBrowsedPath.toLowerCase().startsWith(chipPath.toLowerCase())) {
+        chip.classList.add("active");
+      } else {
+        chip.classList.remove("active");
+      }
+    });
+
+    // Render Subdirectories
+    if (!navContainer) return;
+    const dirs = data.directories || [];
+    if (dirs.length === 0) {
+      navContainer.innerHTML = `<div class="sidebar-empty" style="grid-column: 1 / -1; padding: 20px 0;">No subdirectories found in this folder.</div>`;
+      return;
+    }
+
+    let html = "";
+    for (const d of dirs) {
+      html += `
+        <div class="modal-dir-item" onclick="browseDirectory('${escapeHtml(d.path.replace(/\\/g, '\\\\'))}')" title="${escapeHtml(d.path)}">
+          <svg class="svg-inline svg-accent-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+          <span class="modal-dir-name">${escapeHtml(d.name)}</span>
+        </div>
+      `;
+    }
+    navContainer.innerHTML = html;
+  } catch (err) {
+    if (navContainer) {
+      navContainer.innerHTML = `<div class="sidebar-empty" style="grid-column: 1 / -1; color: #f87171;">⚠️ ${escapeHtml(err.message)}</div>`;
+    }
+  }
+}
+
+function navigateDirectoryParent() {
+  if (currentParentPath) {
+    browseDirectory(currentParentPath);
+  }
+}
+
+function handlePathInputKeyDown(event) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    submitCustomPath();
+  }
+}
+
+function submitCustomPath() {
+  const pathInput = document.getElementById("modal-custom-path-input");
+  if (!pathInput) return;
+  const val = pathInput.value.trim();
+  if (val) {
+    browseDirectory(val);
+  }
+}
+
+function openCurrentBrowsedFolder() {
+  if (currentBrowsedPath) {
+    switchProjectWorkspace(currentBrowsedPath);
+  }
+}
+
+async function triggerNativeFolderPicker() {
+  if ("showDirectoryPicker" in window) {
+    try {
+      const handle = await window.showDirectoryPicker();
+      if (handle && handle.name) {
+        const pickedName = handle.name;
+        // If picked folder is the root project or workspace name
+        if (
+          pickedName.toLowerCase() === "codestorm-winning-team" ||
+          pickedName.toLowerCase() === "app" ||
+          pickedName.toLowerCase() === "workspace" ||
+          pickedName.toLowerCase() === "root"
+        ) {
+          switchProjectWorkspace("workspace");
+          return;
+        }
+
+        // If inside current browsed directory
+        if (currentBrowsedPath && !currentBrowsedPath.toLowerCase().endsWith(pickedName.toLowerCase())) {
+          const sep = currentBrowsedPath.includes("\\") ? "\\" : "/";
+          const candidate = currentBrowsedPath.endsWith(sep)
+            ? currentBrowsedPath + pickedName
+            : currentBrowsedPath + sep + pickedName;
+          switchProjectWorkspace(candidate).catch(() => {
+            switchProjectWorkspace(pickedName);
+          });
+        } else {
+          switchProjectWorkspace(pickedName);
+        }
+        return;
+      }
+    } catch (err) {
+      if (err.name === "AbortError") return;
+    }
+  }
+
+  // Fallback to HTML5 directory input
+  const pickerInput = document.getElementById("local-drive-folder-picker");
+  if (pickerInput) {
+    pickerInput.click();
+  }
+}
+
+function handleNativeFolderSelected(event) {
+  const files = event.target.files;
+  if (files && files.length > 0) {
+    const firstRel = files[0].webkitRelativePath || "";
+    const topFolder = firstRel.split("/")[0] || firstRel.split("\\")[0];
+    if (topFolder) {
+      if (
+        topFolder.toLowerCase() === "codestorm-winning-team" ||
+        topFolder.toLowerCase() === "app" ||
+        topFolder.toLowerCase() === "workspace"
+      ) {
+        switchProjectWorkspace("workspace");
+        return;
+      }
+
+      if (currentBrowsedPath && !currentBrowsedPath.toLowerCase().endsWith(topFolder.toLowerCase())) {
+        const sep = currentBrowsedPath.includes("\\") ? "\\" : "/";
+        const candidate = currentBrowsedPath.endsWith(sep)
+          ? currentBrowsedPath + topFolder
+          : currentBrowsedPath + sep + topFolder;
+        switchProjectWorkspace(candidate).catch(() => {
+          switchProjectWorkspace(topFolder);
+        });
+      } else {
+        switchProjectWorkspace(topFolder);
+      }
+    }
+  }
 }
 
 async function fetchRecentProjects() {
@@ -585,7 +808,7 @@ function renderRecentProjectsList(projects) {
     const isCurrent = currentProject && currentProject.path === p;
     const baseName = p.split("\\").pop() || p.split("/").pop() || p;
     html += `
-      <div class="recent-project-row ${isCurrent ? 'active' : ''}" onclick="switchProjectWorkspace('${escapeHtml(p)}')">
+      <div class="recent-project-row ${isCurrent ? 'active' : ''}" onclick="switchProjectWorkspace('${escapeHtml(p.replace(/\\/g, '\\\\'))}')">
         <div class="row-left">
           <svg class="svg-inline svg-accent-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
           <span class="project-basename font-bold">${escapeHtml(baseName)}</span>
@@ -605,16 +828,21 @@ async function switchProjectWorkspace(path) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path }),
     });
-    if (!res.ok) throw new Error("Failed to switch workspace");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || "Failed to switch workspace");
+    }
     closeProjectModal();
     openFiles.clear();
     await loadActiveProject();
     await refreshProjectTree();
     refreshLivePreview();
     
-    // Open starter file in new workspace
+    // Open starter file in new workspace if exists
     openFileByPath("style.css").catch(() => {
-      openFileByPath("index.html").catch(() => {});
+      openFileByPath("index.html").catch(() => {
+        openFileByPath("README.md").catch(() => {});
+      });
     });
   } catch (err) {
     alert("Switch workspace failed: " + err.message);
@@ -1309,6 +1537,13 @@ function handleGlobalShortcuts(e) {
   if ((e.ctrlKey || e.metaKey) && e.key === "s") {
     e.preventDefault();
     saveActiveFile();
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === "o" || e.key === "O")) {
+    e.preventDefault();
+    openProjectModal();
+  }
+  if (e.key === "Escape") {
+    closeProjectModal();
   }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "E") {
     e.preventDefault();

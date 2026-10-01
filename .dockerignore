@@ -10,5 +10,4 @@ __pycache__/
 .env
 .env.local
 .env.*.local
-dist/
-**/dist/
+mcp-server/dist/
