@@ -1268,6 +1268,143 @@ html, body {
   max-width: 95%;
 }
 
+/* Thinking / Processing State */
+.chat-msg.thinking-bubble {
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.04), rgba(0, 229, 255, 0.04));
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  box-shadow: 0 0 15px rgba(0, 255, 136, 0.08);
+}
+
+.thinking-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.thinking-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 255, 136, 0.2);
+  border-top-color: #00ff88;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.thinking-text {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--accent-primary);
+  letter-spacing: 0.02em;
+}
+
+.thinking-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.shimmer-bar {
+  height: 8px;
+  width: 100%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.03) 75%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: shimmer 1.5s infinite;
+}
+
+.shimmer-bar.short {
+  width: 60%;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Interactive File Action Chips */
+.file-actions-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 8px 0;
+}
+
+.file-action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background-color: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.file-action-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.file-action-chip.chip-create {
+  border-color: rgba(0, 255, 136, 0.4);
+}
+
+.file-action-chip.chip-create:hover {
+  border-color: #00ff88;
+  background-color: rgba(0, 255, 136, 0.08);
+}
+
+.file-action-chip.chip-edit {
+  border-color: rgba(0, 229, 255, 0.4);
+}
+
+.file-action-chip.chip-edit:hover {
+  border-color: #00e5ff;
+  background-color: rgba(0, 229, 255, 0.08);
+}
+
+.file-action-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-family: var(--font-mono);
+}
+
+.chip-create .file-action-badge {
+  background-color: rgba(0, 255, 136, 0.2);
+  color: #00ff88;
+}
+
+.chip-edit .file-action-badge {
+  background-color: rgba(0, 229, 255, 0.2);
+  color: #00e5ff;
+}
+
+.file-action-name {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: #ffffff;
+}
+
+.file-action-hint {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
+.file-action-chip:hover .file-action-hint {
+  color: var(--accent-cyan);
+}
+
 .chat-msg.error-msg {
   background-color: rgba(255, 51, 102, 0.1);
   border: 1px solid rgba(255, 51, 102, 0.3);
@@ -1304,6 +1441,46 @@ html, body {
   line-height: 1.5;
 }
 
+.msg-text h1, .msg-text h2, .msg-text h3 {
+  color: #ffffff;
+  margin: 6px 0 4px 0;
+  font-size: 0.92rem;
+}
+
+.msg-text h4 {
+  color: var(--accent-cyan);
+  margin: 6px 0 2px 0;
+  font-size: 0.82rem;
+}
+
+.msg-text ul, .msg-text ol {
+  padding-left: 16px;
+  margin: 4px 0;
+}
+
+.msg-text li {
+  margin-bottom: 2px;
+}
+
+.msg-text pre {
+  background-color: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+
+.msg-text code {
+  font-family: var(--font-mono);
+  color: var(--accent-primary);
+  background-color: rgba(0, 255, 136, 0.08);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
 .msg-steps-box {
   margin-top: 8px;
   padding: 6px 10px;
@@ -1316,11 +1493,23 @@ html, body {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .step-num {
   color: var(--accent-cyan);
   font-weight: 600;
+}
+
+.step-tool {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.step-target {
+  color: var(--text-dim);
 }
 
 .msg-verdict {

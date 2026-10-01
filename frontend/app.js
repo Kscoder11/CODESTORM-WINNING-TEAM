@@ -1111,74 +1111,147 @@ function handlePromptSubmit(event) {
       <div class="msg-text">${escapeHtml(promptText)}</div>
     `;
     chatContainer.appendChild(userDiv);
+
+    // Live Processing / Thinking UI (Antigravity-Style)
+    const thinkingDiv = document.createElement("div");
+    thinkingDiv.className = "chat-msg assistant-msg thinking-bubble";
+    thinkingDiv.id = "active-thinking-bubble";
+    thinkingDiv.innerHTML = `
+      <div class="msg-header">
+        <span class="msg-author">NOMOS AI AGENT</span>
+        <span class="msg-time">Processing</span>
+      </div>
+      <div class="thinking-row">
+        <span class="thinking-spinner"></span>
+        <span class="thinking-text" id="thinking-step-text">Reasoning & evaluating Zero-Trust policy invariants...</span>
+      </div>
+      <div class="thinking-skeleton">
+        <div class="shimmer-bar"></div>
+        <div class="shimmer-bar short"></div>
+      </div>
+    `;
+    chatContainer.appendChild(thinkingDiv);
     chatContainer.scrollTop = chatContainer.scrollHeight;
-  }
 
-  if (ta) ta.value = "";
+    // Cycle thinking status messages
+    const thinkingTextEl = thinkingDiv.querySelector("#thinking-step-text");
+    const t1 = setTimeout(() => {
+      if (thinkingTextEl) thinkingTextEl.textContent = "Analyzing workspace files & preparing tool execution...";
+    }, 500);
+    const t2 = setTimeout(() => {
+      if (thinkingTextEl) thinkingTextEl.textContent = "Applying workspace modifications & refreshing preview...";
+    }, 1200);
 
-  const sendBtn = document.getElementById("send-prompt-btn");
-  if (sendBtn) sendBtn.disabled = true;
+    if (ta) ta.value = "";
 
-  fetch("/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-User-Id": "operator" },
-    body: JSON.stringify({ prompt: promptText, activeFile: activeFilePath || undefined }),
-  })
-    .then((r) => r.json())
-    .then((data) => {
-      if (chatContainer) {
+    const sendBtn = document.getElementById("send-prompt-btn");
+    if (sendBtn) sendBtn.disabled = true;
+
+    fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-User-Id": "operator" },
+      body: JSON.stringify({ prompt: promptText, activeFile: activeFilePath || undefined }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        // Remove thinking placeholder
+        thinkingDiv.remove();
+
         const aiDiv = document.createElement("div");
         aiDiv.className = "chat-msg assistant-msg";
+
+        // Build File Action Badges
+        let fileActionsHtml = "";
+        if (data.steps && data.steps.length > 0) {
+          const filesTouched = [];
+          for (const s of data.steps) {
+            const p = s.arguments?.path;
+            if (p && typeof p === "string" && !filesTouched.includes(p)) {
+              filesTouched.push(p);
+              const isCreate = s.tool === "create_project_file" || promptText.toLowerCase().includes("create");
+              fileActionsHtml += `
+                <div class="file-action-chip ${isCreate ? 'chip-create' : 'chip-edit'}" onclick="openFileByPath('${escapeHtml(p)}')">
+                  <span class="file-action-badge">${isCreate ? 'CREATED' : 'MODIFIED'}</span>
+                  <span class="file-action-name font-bold">${escapeHtml(p)}</span>
+                  <span class="file-action-hint">Open in Editor ↗</span>
+                </div>
+              `;
+            }
+          }
+          if (fileActionsHtml) {
+            fileActionsHtml = `<div class="file-actions-container">${fileActionsHtml}</div>`;
+          }
+        }
+
+        // Build Steps Timeline
         let stepsHtml = "";
         if (data.steps && data.steps.length > 0) {
-          stepsHtml = `<div class="msg-steps-box">` + data.steps.map(s => `<div class="msg-step-row"><span class="step-num">Step ${s.stepNumber || 1}:</span> ${escapeHtml(s.tool || s.toolName || "Reasoning")}</div>`).join("") + `</div>`;
+          stepsHtml = `<div class="msg-steps-box">` + data.steps.map(s => `
+            <div class="msg-step-row">
+              <span class="step-num">Step ${s.stepNumber || 1}:</span> 
+              <span class="step-tool">${escapeHtml(s.tool || s.toolName || "Reasoning")}</span>
+              ${s.arguments?.path ? `<span class="step-target">(${escapeHtml(String(s.arguments.path))})</span>` : ""}
+            </div>
+          `).join("") + `</div>`;
         }
+
+        // Build Policy Decision Verdict Pill
         let verdictBadge = "";
-        if (data.decision || data.status) {
+        if (data.decision || data.status || data.promptAnalysis) {
           const action = data.decision?.action || (data.status === 'approval_required' ? 'approval_required' : data.status === 'denied' ? 'deny' : 'allow');
           const badgeClass = action === 'allow' ? 'pill-success' : action === 'approval_required' ? 'pill-warning' : 'pill-danger';
-          verdictBadge = `<div class="msg-verdict ${badgeClass}">VERDICT: ${action.toUpperCase()} · ${escapeHtml(data.decision?.reason || data.reason || "")}</div>`;
+          const reasonText = data.decision?.reason || data.reason || data.promptAnalysis?.reason || "Zero-Trust policy verified";
+          verdictBadge = `<div class="msg-verdict ${badgeClass}">VERDICT: ${action.toUpperCase()} · ${escapeHtml(reasonText)}</div>`;
         }
+
         aiDiv.innerHTML = `
           <div class="msg-header">
             <span class="msg-author">NOMOS AI AGENT</span>
             <span class="msg-time">${new Date().toLocaleTimeString()}</span>
           </div>
+          ${fileActionsHtml}
           <div class="msg-text">${formatMarkdown(data.finalResponse || data.response || data.message || "Action processed.")}</div>
           ${verdictBadge}
           ${stepsHtml}
         `;
         chatContainer.appendChild(aiDiv);
         chatContainer.scrollTop = chatContainer.scrollHeight;
-      }
-      refreshLivePreview();
-      refreshProjectTree();
-      refreshGitStatus();
-      if (data.steps && data.steps.length > 0) {
-        for (const step of data.steps) {
-          const filePath = step.arguments?.path;
-          if (filePath && typeof filePath === "string") {
-            openFileByPath(filePath);
+
+        refreshLivePreview();
+        refreshProjectTree();
+        refreshGitStatus();
+
+        if (data.steps && data.steps.length > 0) {
+          for (const step of data.steps) {
+            const filePath = step.arguments?.path;
+            if (filePath && typeof filePath === "string") {
+              openFileByPath(filePath);
+            }
           }
+        } else if (activeFilePath) {
+          openFiles.delete(activeFilePath);
+          openFileByPath(activeFilePath);
         }
-      } else if (activeFilePath) {
-        openFiles.delete(activeFilePath);
-        openFileByPath(activeFilePath);
-      }
-      fetchPendingApprovals();
-      fetchAuditLogs();
-    })
-    .catch((err) => {
-      if (chatContainer) {
+        fetchPendingApprovals();
+        fetchAuditLogs();
+      })
+      .catch((err) => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        thinkingDiv.remove();
+
         const errDiv = document.createElement("div");
         errDiv.className = "chat-msg error-msg";
-        errDiv.innerHTML = `<div class="msg-text">Error: ${escapeHtml(err.message)}</div>`;
+        errDiv.innerHTML = `<div class="msg-text">⚠️ **Execution Error**: ${escapeHtml(err.message)}</div>`;
         chatContainer.appendChild(errDiv);
-      }
-    })
-    .finally(() => {
-      if (sendBtn) sendBtn.disabled = false;
-    });
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      })
+      .finally(() => {
+        if (sendBtn) sendBtn.disabled = false;
+      });
+  }
 }
 
 // ============================================================
