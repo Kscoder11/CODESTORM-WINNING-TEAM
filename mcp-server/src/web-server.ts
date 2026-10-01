@@ -61,6 +61,18 @@ export const REPO_ROOT = findRepoRoot();
 // Active Workspace Root (Defaults to the entire repository workspace)
 let activeProjectRoot = REPO_ROOT;
 
+/**
+ * Ensure the active workspace is initialized with Git so all source control features work seamlessly.
+ */
+function ensureGitRepository(dir: string): void {
+  if (!existsSync(join(dir, ".git"))) {
+    exec("git init -b main && git config user.name 'PNG5 Operator' && git config user.email 'operator@png5.local' && git add -A && git commit -m 'Initial workspace state' --allow-empty", { cwd: dir }, (err) => {
+      if (!err) log("info", "Auto-initialized git repository in workspace", { dir });
+    });
+  }
+}
+ensureGitRepository(activeProjectRoot);
+
 const recentProjects: string[] = [
   REPO_ROOT,
   resolve(REPO_ROOT, "frontend"),

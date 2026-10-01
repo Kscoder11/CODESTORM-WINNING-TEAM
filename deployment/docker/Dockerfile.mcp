@@ -35,7 +35,13 @@ COPY frontend/ ./frontend/
 COPY demo/ ./demo/
 COPY policies/ ./policies/
 
-RUN chown -R png5:png5 /app
+# Configure git and initialize workspace repository
+RUN git config --system user.name "PNG5 Operator" && \
+    git config --system user.email "operator@png5.local" && \
+    git config --system init.defaultBranch main && \
+    git config --system --add safe.directory "*" && \
+    cd /app && git init -b main && git add -A && git commit -m "Initial container workspace" --allow-empty && \
+    chown -R png5:png5 /app
 
 USER png5
 
