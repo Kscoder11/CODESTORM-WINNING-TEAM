@@ -1407,3 +1407,154 @@ function formatMarkdown(text) {
   html = html.replace(/^\d+\. (.*$)/gim, "<li>$1</li>");
   return html;
 }
+
+// ============================================================
+// Enhanced UI & Layout Control Handlers
+// ============================================================
+
+function injectPrompt(text) {
+  const ta1 = document.getElementById("prompt-textarea");
+  const ta2 = document.getElementById("ai-prompt-input");
+  if (ta1) { ta1.value = text; ta1.focus(); }
+  if (ta2) { ta2.value = text; ta2.focus(); }
+}
+
+function handlePromptSubmit(event) {
+  if (event) event.preventDefault();
+  const ta = document.getElementById("prompt-textarea") || document.getElementById("ai-prompt-input");
+  const promptText = ta?.value.trim();
+  if (!promptText) return;
+
+  const chatContainer = document.getElementById("chat-messages-container");
+  if (chatContainer) {
+    const userDiv = document.createElement("div");
+    userDiv.className = "chat-msg user-msg";
+    userDiv.innerHTML = `
+      <div class="msg-header">
+        <span class="msg-author">OPERATOR</span>
+        <span class="msg-time">${new Date().toLocaleTimeString()}</span>
+      </div>
+      <div class="msg-text">${escapeHtml(promptText)}</div>
+    `;
+    chatContainer.appendChild(userDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
+
+  if (ta) ta.value = "";
+
+  const sendBtn = document.getElementById("send-prompt-btn");
+  if (sendBtn) sendBtn.disabled = true;
+
+  fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-User-Id": "operator" },
+    body: JSON.stringify({ prompt: promptText, activeFile: activeFilePath || undefined }),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (chatContainer) {
+        const aiDiv = document.createElement("div");
+        aiDiv.className = "chat-msg assistant-msg";
+        let stepsHtml = "";
+        if (data.steps && data.steps.length > 0) {
+          stepsHtml = `<div class="msg-steps-box">` + data.steps.map(s => `<div class="msg-step-row"><span class="step-num">Step ${s.stepNumber || 1}:</span> ${escapeHtml(s.tool || s.toolName || "Reasoning")}</div>`).join("") + `</div>`;
+        }
+        let verdictBadge = "";
+        if (data.decision || data.status) {
+          const action = data.decision?.action || (data.status === 'approval_required' ? 'approval_required' : data.status === 'denied' ? 'deny' : 'allow');
+          const badgeClass = action === 'allow' ? 'pill-success' : action === 'approval_required' ? 'pill-warning' : 'pill-danger';
+          verdictBadge = `<div class="msg-verdict ${badgeClass}">VERDICT: ${action.toUpperCase()} · ${escapeHtml(data.decision?.reason || data.reason || "")}</div>`;
+        }
+        aiDiv.innerHTML = `
+          <div class="msg-header">
+            <span class="msg-author">NOMOS AI AGENT</span>
+            <span class="msg-time">${new Date().toLocaleTimeString()}</span>
+          </div>
+          <div class="msg-text">${formatMarkdown(data.response || data.message || "Action processed.")}</div>
+          ${verdictBadge}
+          ${stepsHtml}
+        `;
+        chatContainer.appendChild(aiDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+      refreshLivePreview();
+      if (activeFilePath) {
+        openFiles.delete(activeFilePath);
+        openFileByPath(activeFilePath);
+      }
+    })
+    .catch((err) => {
+      if (chatContainer) {
+        const errDiv = document.createElement("div");
+        errDiv.className = "chat-msg error-msg";
+        errDiv.innerHTML = `<div class="msg-text">Error: ${escapeHtml(err.message)}</div>`;
+        chatContainer.appendChild(errDiv);
+      }
+    })
+    .finally(() => {
+      if (sendBtn) sendBtn.disabled = false;
+    });
+}
+
+function switchRightTab(tab) {
+  const previewTab = document.getElementById("right-tab-preview");
+  const assistantTab = document.getElementById("right-tab-assistant");
+  const previewView = document.getElementById("right-view-preview");
+  const assistantView = document.getElementById("right-view-assistant");
+
+  if (tab === "preview") {
+    previewTab?.classList.add("active");
+    assistantTab?.classList.remove("active");
+    previewView?.classList.add("active");
+    assistantView?.classList.remove("active");
+  } else {
+    assistantTab?.classList.add("active");
+    previewTab?.classList.remove("active");
+    assistantView?.classList.add("active");
+    previewView?.classList.remove("active");
+  }
+}
+
+function setPreviewViewport(viewport) {
+  const iframeWrapper = document.getElementById("preview-iframe-wrapper");
+  const btnD = document.getElementById("preview-viewport-desktop");
+  const btnT = document.getElementById("preview-viewport-tablet");
+  const btnM = document.getElementById("preview-viewport-mobile");
+
+  btnD?.classList.toggle("active", viewport === "desktop");
+  btnT?.classList.toggle("active", viewport === "tablet");
+  btnM?.classList.toggle("active", viewport === "mobile");
+
+  if (iframeWrapper) {
+    if (viewport === "mobile") {
+      iframeWrapper.style.maxWidth = "375px";
+    } else if (viewport === "tablet") {
+      iframeWrapper.style.maxWidth = "768px";
+    } else {
+      iframeWrapper.style.maxWidth = "100%";
+    }
+  }
+}
+
+function refreshLivePreview() {
+  const iframe = document.getElementById("preview-frame");
+  if (iframe) {
+    iframe.src = "/preview/index.html?t=" + Date.now();
+  }
+}
+
+function runAuditVerification() {
+  fetch("/api/audit/verify")
+    .then((r) => r.json())
+    .then((data) => {
+      const statusEl = document.getElementById("audit-verify-status");
+      if (statusEl) {
+        statusEl.textContent = data.valid
+          ? `Cryptographic SHA-256 Ledger: VERIFIED (${data.totalRecords} events)`
+          : `Audit Chain Warning: Tamper detected at Seq #${data.firstBadSeq}`;
+        statusEl.style.color = data.valid ? "#00ff88" : "#ff3366";
+      }
+      alert(data.valid ? "✅ Audit Chain Integrity Verified: All SHA-256 HMAC signatures valid." : "⚠️ Audit Chain Tamper Detected at Seq #" + data.firstBadSeq);
+    })
+    .catch((err) => alert("Audit check failed: " + err.message));
+}
